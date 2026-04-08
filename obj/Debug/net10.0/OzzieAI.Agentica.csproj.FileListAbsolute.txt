@@ -1,0 +1,13 @@
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\bin\Debug\net10.0\OzzieAI.Agentica.deps.json
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\bin\Debug\net10.0\OzzieAI.Agentica.dll
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\bin\Debug\net10.0\OzzieAI.Agentica.pdb
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\obj\Debug\net10.0\OzzieAI.Agentica.csproj.AssemblyReference.cache
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\obj\Debug\net10.0\OzzieAI.Agentica.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\obj\Debug\net10.0\OzzieAI.Agentica.AssemblyInfoInputs.cache
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\obj\Debug\net10.0\OzzieAI.Agentica.AssemblyInfo.cs
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\obj\Debug\net10.0\OzzieAI.Agentica.csproj.CoreCompileInputs.cache
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\obj\Debug\net10.0\OzzieAI.Agentica.sourcelink.json
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\obj\Debug\net10.0\OzzieAI.Agentica.dll
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\obj\Debug\net10.0\refint\OzzieAI.Agentica.dll
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\obj\Debug\net10.0\OzzieAI.Agentica.pdb
+C:\Users\Jingl\Desktop\C# Code\AU.com\Agentica\Agentica\Agentica\obj\Debug\net10.0\ref\OzzieAI.Agentica.dll

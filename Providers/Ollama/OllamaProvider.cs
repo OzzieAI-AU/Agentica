@@ -14,7 +14,7 @@
     /// High-performance local provider for Ollama.
     /// Supports Multimodal (Images) and Tool Calling.
     /// </summary>
-    public class OllamaLlmClient : ILlmProvider
+    public class OllamaProvider : ILlmProvider
     {
 
         private readonly HttpClient _http;
@@ -30,7 +30,7 @@
         };
 
 
-        public OllamaLlmClient(string model = "llama3.1", string baseUrl = "http://192.168.3.3:11434")
+        public OllamaProvider(string model = "llama3.1", string baseUrl = "http://192.168.3.3:11434")
         {
         
             _model = model;
@@ -115,6 +115,7 @@
         /// </summary>
         public async Task<IChatResponse> GenerateResponseAsync(List<IChatMessage> history, List<IAgentTool>? tools = null)
         {
+
             var request = new OllamaChatRequest
             {
                 Model = _model,
@@ -122,9 +123,9 @@
                 Tools = tools?.Select(t => t.GetToolDefinition()).ToList(),
                 Messages = history.Select(m => new OllamaMessage
                 {
-                    Role = ((ChatMessage)m).Role.ToLower() == "tool" ? "tool" : ((ChatMessage)m).Role, // Ollama uses 'tool' role for results
-                    Content = ((ChatMessage)m).Content.ToString(),
-                    Images = ((ChatMessage)m).MediaData != null ? new List<string> { ((ChatMessage)m).MediaData } : null
+                    Role = m.Role.ToLower() == "tool" ? "tool" : m.Role, // Ollama uses 'tool' role for results
+                    Content = m.Content.ToString(),
+                    Images = m.MediaData != null ? new List<string> { m.MediaData } : null
                 }).ToList()
             };
 

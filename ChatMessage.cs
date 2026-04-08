@@ -45,6 +45,8 @@ namespace OzzieAI.Agentica
 
         public ChatMessage(string role, string prompt)
         {
+            Role = role;
+            Content = prompt;
         }
     }
 }

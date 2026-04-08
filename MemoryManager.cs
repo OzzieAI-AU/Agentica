@@ -23,7 +23,7 @@ namespace OzzieAI.Agentica
         /// <param name="history">The full chronological list of chat messages.</param>
         /// <param name="summarizer">The LLM client designated for compression tasks (typically a fast, local model).</param>
         /// <returns>A condensed list of messages that fits within the model's context window.</returns>
-        public async Task<List<ChatMessage>> ConciliateMemoryAsync(List<ChatMessage> history, OllamaLlmClient summarizer)
+        public async Task<List<ChatMessage>> ConciliateMemoryAsync(List<ChatMessage> history, OllamaProvider summarizer)
         {
             // Threshold Check: Only compress if we have enough depth to justify a summary.
             // 8 messages allow for 1 System Anchor, 4 Middle, and 3 Recent.

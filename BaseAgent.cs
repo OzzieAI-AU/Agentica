@@ -76,7 +76,15 @@
         public async Task StartTaskAsync(string prompt)
         {
             
-            Memory.AddMessage(new ChatMessage("user", prompt));
+            Memory.AddMessage(new ChatMessage() 
+            {
+                Content = prompt, 
+                MediaData = null, 
+                MimeType = null, 
+                Role = "user", 
+                ToolId = null, 
+                ToolName = null
+            });
             await RunNextStepAsync();
         }
 

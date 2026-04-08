@@ -43,6 +43,17 @@
         /// <param name="message">The incoming inter-agent message from the <see cref="IAgentBus"/>.</param>
         protected override async Task ProcessIncomingMessageAsync(AgentMessage message)
         {
+
+            // --- CRITICAL MEMORY INGESTION ---
+            // Ensure the Manager's history is initialized and the current interaction is logged.
+            // Without this, the Manager 'forgets' who it is talking to or what it was asked to do.
+            // Memory.History ??= new List<IChatMessage>();
+            Memory.History.Add(new ChatMessage
+            {
+                Role = message.Type == MessageType.TaskResult ? "user" : "assistant",
+                Content = $"Received {message.Type} from {message.SenderId}: {message.Content}"
+            });
+
             switch (message.Type)
             {
                 case MessageType.TaskAssignment:

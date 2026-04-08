@@ -72,7 +72,7 @@ One of Agentica's greatest strengths is its ability to assign different LLM prov
 
 ```C#
 
-        Console.Title = "OzzieAI Agentica Framework";
+Console.Title = "OzzieAI Agentica Framework";
         Console.WriteLine("🤖 Initializing Agentica Swarm...");
 
         // Infrastructure Setup
@@ -81,9 +81,9 @@ One of Agentica's greatest strengths is its ability to assign different LLM prov
         // 1. Initialize different providers
         var geminiKey = Environment.GetEnvironmentVariable("Gemini_API_KEY") ?? throw new Exception("Gemini_API_KEY not set in environment variables.");
         var grokKey = Environment.GetEnvironmentVariable("GROK_API_KEY") ?? throw new Exception("GROK_API_KEY not set in environment variables.");
-        var geminiProvider = new GeminiProvider(apiKey: geminiKey);
-        var grokProvider = new GrokProvider(apiKey: grokKey, model: "grok-4.20-0309-reasoning");
-        var localCoderBrain = new OllamaLlmClient(model: "codellama:7b");
+        var geminiBrain = new GeminiProvider(apiKey: geminiKey, model: "gemini-flash-latest");
+        var grokBrain = new GrokProvider(apiKey: grokKey, model: "grok-4.20-0309-reasoning");
+        var ollamaBrain = new OllamaProvider(model: "codellama:7b");
 
         // 2. Setup Factory (No global brain anymore)
         var bus = new AgentBus();
@@ -94,21 +94,21 @@ One of Agentica's greatest strengths is its ability to assign different LLM prov
         {
             Name = "Ozzie-CEO",
             Role = AgentRole.Boss,
-            Provider = grokProvider
+            Provider = grokBrain
         });
 
         var manager = (ManagerAgent)factory.CreateAgent(new AgentConfig
         {
             Name = "PM-Alice",
             Role = AgentRole.Manager,
-            Provider = grokProvider
+            Provider = grokBrain
         });
 
         var worker = (WorkerAgent)factory.CreateAgent(new AgentConfig
         {
             Name = "Bob-Dev",
             Role = AgentRole.Worker,
-            Provider = localCoderBrain
+            Provider = ollamaBrain
         });
 
         // 4. Arming the Worker with your Uploaded Tools

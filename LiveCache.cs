@@ -233,7 +233,7 @@ namespace OzzieAI.Agentica
         {
 
             if (string.IsNullOrWhiteSpace(rootDirectory) || !Directory.Exists(rootDirectory))
-                throw new DirectoryNotFoundException($"Root directory not found: {rootDirectory}");
+                Directory.CreateDirectory(rootDirectory);
 
             _rootDirectory = Path.GetFullPath(rootDirectory);
             _cacheFilePath = Path.Combine(_rootDirectory, ".livecache.json");
