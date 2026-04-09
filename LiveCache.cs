@@ -266,7 +266,7 @@ namespace OzzieAI.Agentica
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Warning: Failed to load LiveCache from disk: {ex.Message}");
+                ConsoleLogger.WriteLine($"Warning: Failed to load LiveCache from disk: {ex.Message}", ConsoleColor.Red);
             }
         }
 
@@ -285,7 +285,7 @@ namespace OzzieAI.Agentica
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error saving LiveCache: {ex.Message}");
+                    ConsoleLogger.WriteLine($"Error saving LiveCache: {ex.Message}", ConsoleColor.Red);
                 }
             }
         }
@@ -657,7 +657,7 @@ namespace OzzieAI.Agentica
         {
             // Safe cross-thread logging (if you have rtbMain accessible, or raise event)
             // For now, Console + optional event
-            Console.WriteLine(text);
+            ConsoleLogger.WriteLine(text, ConsoleColor.DarkGray);
             // You can add an event for UI if desired
         }
 

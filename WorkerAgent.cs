@@ -7,74 +7,80 @@
     using System.Threading.Tasks;
 
     /// <summary>
-    /// Represents a high-autonomy execution entity designed for technical implementation.
-    /// The WorkerAgent is optimized for 'Action-Oriented' tasks, utilizing a suite of 
-    /// physical tools (File IO, Terminal, Search) to achieve concrete project milestones.
+    /// Concrete implementation of a Worker Agent that inherits from <see cref="BaseAgent"/>.
+    /// Responsible for receiving task assignments, executing the full reasoning + tool-calling loop,
+    /// and returning a final result back to the sender (typically a Manager or Boss agent).
+    /// Includes rich, color-coded console logging for clear visibility of progress and status.
     /// </summary>
     public class WorkerAgent : BaseAgent
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="WorkerAgent"/>.
+        /// Initializes a new instance of the <see cref="WorkerAgent"/> class.
         /// </summary>
+        /// <param name="config">The configuration settings for this worker agent.</param>
+        /// <param name="bus">The agent message bus for inter-agent communication.</param>
+        /// <param name="memory">The agent's memory instance for conversation history.</param>
         public WorkerAgent(AgentConfig config, IAgentBus bus, DragonMemory memory)
-            : base(config, bus, memory) { }
+            : base(config, bus, memory)
+        {
+            // No additional initialization required — all setup is handled in BaseAgent
+        }
 
         /// <summary>
-        /// Handles operational assignments from the AgentBus.
-        /// When a <see cref="MessageType.TaskAssignment"/> is received, the Worker triggers 
-        /// its internal ReAct (Reason + Act) loop to fulfill the request.
+        /// Processes incoming messages from the agent bus.
+        /// Currently handles <see cref="MessageType.TaskAssignment"/> messages by starting
+        /// the reasoning loop and returning the final result.
         /// </summary>
-        /// <param name="message">The task metadata and content sent by a Manager or Boss.</param>
+        /// <param name="message">The incoming message to process.</param>
         protected override async Task ProcessIncomingMessageAsync(AgentMessage message)
         {
-            if (message.Type == MessageType.TaskAssignment)
+            try
             {
-                // Visual signaling that the 'Hands' of the organization are moving
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine($"\n[Worker {Config.Name}] Task Received: {message.Content}");
-                Console.ResetColor();
-
-                // 1. Memory Initialization & Ingestion
-                // Ensure the History collection is initialized to prevent null reference exceptions.
-                // Memory.History ??= new List<IChatMessage>();
-
-                // Explicitly add the incoming task to the agent's memory as a user prompt.
-                // This ensures the agent (and the extraction logic later) has a definitive record 
-                // of what triggered this execution cycle.
-                Memory.History.Add(new ChatMessage
+                // Only process TaskAssignment messages for this worker agent
+                if (message.Type == MessageType.TaskAssignment)
                 {
-                    Role = "user",
-                    Content = message.Content
-                });
+                    // Log receipt of new task with visual emphasis:
+                    ConsoleLogger.WriteLine($"\n[Worker {Config.Name}] 🚀 RECEIVED TASK:", ConsoleColor.Yellow);
+                    ConsoleLogger.WriteLine($"   {message.Content}", ConsoleColor.Yellow);
 
-                // 2. Ignition: Enter the recursive Thinking Loop inherited from BaseAgent.
-                // This kicks off the loop where the LLM autonomously decides to call tools 
-                // (e.g., 'file_manager' to read/write, 'terminal_executor' to build).
-                await StartTaskAsync(message.Content);
+                    // Indicate start of reasoning and tool execution:
+                    ConsoleLogger.WriteLine($"[Worker {Config.Name}] 🧠 Starting reasoning + tool execution loop...", ConsoleColor.Blue);
 
-                // 3. Extraction: Identify the final conclusion from the cognitive history.
-                // We use null-conditional operators (?.) to safely evaluate the Role, preventing crashes 
-                // if a malformed message was injected into the history during the execution loop.
-                var lastAssistantMessage = Memory.History
-                    .LastOrDefault(m => m.Role?.Equals("assistant", StringComparison.OrdinalIgnoreCase) == true);
+                    // Add the task directly to memory history (in addition to StartTaskAsync)
+                    Memory.History.Add(new ChatMessage { Role = "user", Content = message.Content });
 
-                // Safely extract the content, providing a fallback if the LLM failed to generate a final summary.
-                string finalReport = lastAssistantMessage?.Content?.ToString()
-                    ?? "Task processed, but no descriptive report was generated by the LLM.";
+                    // Begin the agent's reasoning loop (inherited from BaseAgent)
+                    await StartTaskAsync(message.Content);
 
-                // 4. Reporting: Close the loop by sending the result back to the Requester.
-                // This informs the Manager/Boss that the task is complete and provides the technical evidence.
-                await Bus.SendAsync(new AgentMessage(
-                    SenderId: Config.Id,
-                    ReceiverId: message.SenderId,
-                    Type: MessageType.TaskResult,
-                    Content: finalReport,
-                    Timestamp: DateTime.UtcNow));
+                    ConsoleLogger.WriteLine($"[Worker {Config.Name}] 🔄 Reasoning loop finished.", ConsoleColor.Yellow);
 
-                // Visual confirmation that the communication loop has been closed
-                Console.ForegroundColor = ConsoleColor.DarkYellow;
-                Console.WriteLine($"[Worker {Config.Name}] Task Complete. Reporting back to {message.SenderId}.");
-                Console.ResetColor();
+                    // Extract the final assistant message as the completed report
+                    var lastAssistant = Memory.History
+                        .LastOrDefault(m => m.Role?.Equals("assistant", StringComparison.OrdinalIgnoreCase) == true);
+
+                    string finalReport = lastAssistant?.Content?.ToString()
+                        ?? "[No final report from LLM]";
+
+                    // Log successful task completion:
+                    ConsoleLogger.WriteLine($"[Worker {Config.Name}] ✅ TASK COMPLETED", ConsoleColor.Green);
+                    ConsoleLogger.WriteLine($"   Final Report: {finalReport}", ConsoleColor.Green);
+
+                    // Send the final result back to the original sender (Manager/Boss)
+                    await Bus.SendAsync(new AgentMessage(
+                        Config.Id,                    // Sender = this worker
+                        message.SenderId,             // Recipient = original requester
+                        MessageType.TaskResult,       // Message type
+                        finalReport,                  // Payload = final report
+                        DateTime.UtcNow));
+
+                    // Confirm the result was sent:
+                    ConsoleLogger.WriteLine($"[Worker {Config.Name}] 📤 Sent result back to Manager/Boss", ConsoleColor.DarkYellow);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log any unexpected errors during message processing:
+                ConsoleLogger.WriteLine($"[Worker {Config.Name}] 💥 ERROR: {ex.Message}", ConsoleColor.Red);
             }
         }
     }

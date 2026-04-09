@@ -29,12 +29,9 @@ namespace OzzieAI.Agentica.Tools
         /// <returns>A string indicating whether the user approved or denied the action.</returns>
         public async Task<string> ExecuteAsync(string jsonArguments)
         {
-            // Visual alert for the user
-            Console.BackgroundColor = ConsoleColor.Red;
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine($"\n[ACTION PENDING - APPROVAL REQUIRED]");
-            Console.WriteLine($"Details: {jsonArguments}");
-            Console.ResetColor();
+            // Visual alert for the user:
+            ConsoleLogger.WriteLine($"\n[ACTION PENDING - APPROVAL REQUIRED]", ConsoleColor.Red);
+            ConsoleLogger.WriteLine($"Details: {jsonArguments}", ConsoleColor.White);
 
             // Prompt for user input
             Console.Write("Allow this action? (y/n): ");

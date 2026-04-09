@@ -41,7 +41,7 @@
         /// constant throughout the lifetime of the configuration and is used for
         /// tracking, logging, and distinguishing between agents.
         /// </remarks>
-        public string Id { get; } = Guid.NewGuid().ToString();
+        public string Id { get; set; } = Guid.NewGuid().ToString();
 
         /// <summary>
         /// Gets or sets the human-readable name of the agent.
@@ -60,6 +60,12 @@
         /// and responsibilities.
         /// </value>
         public AgentRole Role { get; set; }
+
+        /// <summary>
+        /// The ID of this agent's direct boss (set automatically by Boss.StartManager / StartWorker).
+        /// Never hard-code "BOSS_ID" again!
+        /// </summary>
+        public string? ParentId { get; set; }
 
         /// <summary>
         /// Gets or sets a detailed description of the agent's primary task or purpose.

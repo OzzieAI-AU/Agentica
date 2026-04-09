@@ -65,7 +65,7 @@
             else
             {
                 // Log or handle dead-lettering if the recipient does not exist
-                Console.WriteLine($"[BUS WARNING] Failed to deliver message to unknown Agent: {message.ReceiverId}");
+                ConsoleLogger.WriteLine($"[BUS WARNING] Failed to deliver message to unknown Agent: {message.ReceiverId}", ConsoleColor.Red);
             }
         }
     }

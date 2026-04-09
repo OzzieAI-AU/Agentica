@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("OzzieAI.Agentica")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7556826c1b40c155ffbe803b31a1386f296d3096")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+48898a770df8275daaa29f90072023d06c46ffe9")]
 [assembly: System.Reflection.AssemblyProductAttribute("OzzieAI.Agentica")]
 [assembly: System.Reflection.AssemblyTitleAttribute("OzzieAI.Agentica")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

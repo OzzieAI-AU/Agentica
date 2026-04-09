@@ -73,7 +73,7 @@ One of Agentica's greatest strengths is its ability to assign different LLM prov
 ```C#
 
 Console.Title = "OzzieAI Agentica Framework";
-        Console.WriteLine("🤖 Initializing Agentica Swarm...");
+        ConsoleLogger.WriteLine("🤖 Initializing Agentica Swarm...");
 
         // Infrastructure Setup
         string projectPath = Path.Combine(Directory.GetCurrentDirectory(), "Workspace");
@@ -126,7 +126,7 @@ Console.Title = "OzzieAI Agentica Framework";
                          "create the file, and verify it with a terminal build command.";
 
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"\n[MISSION START]: {mission}\n");
+        ConsoleLogger.WriteLine($"\n[MISSION START]: {mission}\n");
         Console.ResetColor();
 
         // Start the chain: Boss -> Manager

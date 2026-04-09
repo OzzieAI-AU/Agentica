@@ -81,10 +81,8 @@ namespace OzzieAI.Agentica.Tools
 
                 if (!errors.Any())
                 {
-                    // Visual confirmation in the console
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine("\n[ROSLYN GATE]: Syntax Validation Succeeded.");
-                    Console.ResetColor();
+                    // Visual confirmation in the console:
+                    ConsoleLogger.WriteLine("\n[ROSLYN GATE]: Syntax Validation Succeeded.", ConsoleColor.Green);
 
                     return "Validation Passed: The code is syntactically correct and safe to persist.";
                 }
@@ -93,10 +91,8 @@ namespace OzzieAI.Agentica.Tools
                 var errorReport = string.Join("\n", errors.Select(e =>
                     $"Line {e.Location.GetLineSpan().StartLinePosition.Line + 1}: {e.GetMessage()}"));
 
-                // Visual warning in the console
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"\n[ROSLYN GATE]: Syntax Validation Failed with {errors.Count} error(s).");
-                Console.ResetColor();
+                // Visual warning in the console:
+                ConsoleLogger.WriteLine($"\n[ROSLYN GATE]: Syntax Validation Failed with {errors.Count} error(s).", ConsoleColor.Red);
 
                 return $"Validation Failed. Please fix the following syntax errors:\n{errorReport}";
             }

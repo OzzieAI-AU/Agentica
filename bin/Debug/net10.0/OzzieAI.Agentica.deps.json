@@ -8,7 +8,12 @@
     ".NETCoreApp,Version=v10.0": {
       "OzzieAI.Agentica/1.0.0": {
         "dependencies": {
-          "Microsoft.CodeAnalysis.CSharp": "5.3.0"
+          "Microsoft.CodeAnalysis.CSharp": "5.3.0",
+          "Microsoft.Web.WebView2": "1.0.3856.49",
+          "Microsoft.Web.WebView2.Core": "1.0.3856.49",
+          "Microsoft.Web.WebView2.WinForms": "1.0.3856.49",
+          "Microsoft.Web.WebView2.Wpf": "1.0.3856.49",
+          "System.Windows.Forms": "10.0.0.0"
         },
         "runtime": {
           "OzzieAI.Agentica.dll": {}
@@ -114,6 +119,227 @@
             "locale": "zh-Hant"
           }
         }
+      },
+      "Microsoft.Web.WebView2/1.0.3856.49": {
+        "runtimeTargets": {
+          "runtimes/win-arm64/native/WebView2Loader.dll": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "1.0.3856.49"
+          },
+          "runtimes/win-x64/native/WebView2Loader.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.0.3856.49"
+          },
+          "runtimes/win-x86/native/WebView2Loader.dll": {
+            "rid": "win-x86",
+            "assetType": "native",
+            "fileVersion": "1.0.3856.49"
+          }
+        }
+      },
+      "Microsoft.Web.WebView2.Core/1.0.3856.49": {
+        "runtime": {
+          "Microsoft.Web.WebView2.Core.dll": {
+            "assemblyVersion": "1.0.3856.49",
+            "fileVersion": "1.0.3856.49"
+          }
+        }
+      },
+      "Microsoft.Web.WebView2.WinForms/1.0.3856.49": {
+        "runtime": {
+          "Microsoft.Web.WebView2.WinForms.dll": {
+            "assemblyVersion": "1.0.3856.49",
+            "fileVersion": "1.0.3856.49"
+          }
+        }
+      },
+      "Microsoft.Web.WebView2.Wpf/1.0.3856.49": {
+        "runtime": {
+          "Microsoft.Web.WebView2.Wpf.dll": {
+            "assemblyVersion": "1.0.3856.49",
+            "fileVersion": "1.0.3856.49"
+          }
+        }
+      },
+      "System.Windows.Forms/10.0.0.0": {
+        "runtime": {
+          "System.Windows.Forms.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        },
+        "resources": {
+          "cs/System.Windows.Forms.resources.dll": {
+            "locale": "cs"
+          },
+          "de/System.Windows.Forms.resources.dll": {
+            "locale": "de"
+          },
+          "es/System.Windows.Forms.resources.dll": {
+            "locale": "es"
+          },
+          "fr/System.Windows.Forms.resources.dll": {
+            "locale": "fr"
+          },
+          "it/System.Windows.Forms.resources.dll": {
+            "locale": "it"
+          },
+          "ja/System.Windows.Forms.resources.dll": {
+            "locale": "ja"
+          },
+          "ko/System.Windows.Forms.resources.dll": {
+            "locale": "ko"
+          },
+          "pl/System.Windows.Forms.resources.dll": {
+            "locale": "pl"
+          },
+          "pt-BR/System.Windows.Forms.resources.dll": {
+            "locale": "pt-BR"
+          },
+          "ru/System.Windows.Forms.resources.dll": {
+            "locale": "ru"
+          },
+          "tr/System.Windows.Forms.resources.dll": {
+            "locale": "tr"
+          },
+          "zh-Hans/System.Windows.Forms.resources.dll": {
+            "locale": "zh-Hans"
+          },
+          "zh-Hant/System.Windows.Forms.resources.dll": {
+            "locale": "zh-Hant"
+          }
+        }
+      },
+      "System.Drawing.Common/10.0.0.0": {
+        "runtime": {
+          "System.Drawing.Common.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        }
+      },
+      "System.Windows.Forms.Primitives/10.0.0.0": {
+        "runtime": {
+          "System.Windows.Forms.Primitives.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        },
+        "resources": {
+          "cs/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "cs"
+          },
+          "de/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "de"
+          },
+          "es/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "es"
+          },
+          "fr/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "fr"
+          },
+          "it/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "it"
+          },
+          "ja/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "ja"
+          },
+          "ko/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "ko"
+          },
+          "pl/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "pl"
+          },
+          "pt-BR/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "pt-BR"
+          },
+          "ru/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "ru"
+          },
+          "tr/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "tr"
+          },
+          "zh-Hans/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "zh-Hans"
+          },
+          "zh-Hant/System.Windows.Forms.Primitives.resources.dll": {
+            "locale": "zh-Hant"
+          }
+        }
+      },
+      "System.Private.Windows.Core/10.0.0.0": {
+        "runtime": {
+          "System.Private.Windows.Core.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        }
+      },
+      "Accessibility/4.0.0.0": {
+        "runtime": {
+          "Accessibility.dll": {
+            "assemblyVersion": "4.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        }
+      },
+      "System.Private.Windows.GdiPlus/10.0.0.0": {
+        "runtime": {
+          "System.Private.Windows.GdiPlus.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        }
+      },
+      "Microsoft.Win32.SystemEvents/10.0.0.0": {
+        "runtime": {
+          "Microsoft.Win32.SystemEvents.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        }
+      },
+      "System.Configuration.ConfigurationManager/10.0.0.0": {
+        "runtime": {
+          "System.Configuration.ConfigurationManager.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        }
+      },
+      "System.Formats.Nrbf/10.0.0.0": {
+        "runtime": {
+          "System.Formats.Nrbf.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        }
+      },
+      "System.Windows.Extensions/10.0.0.0": {
+        "runtime": {
+          "System.Windows.Extensions.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        }
+      },
+      "System.Diagnostics.EventLog/10.0.0.0": {
+        "runtime": {
+          "System.Diagnostics.EventLog.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        }
+      },
+      "System.Security.Cryptography.ProtectedData/10.0.0.0": {
+        "runtime": {
+          "System.Security.Cryptography.ProtectedData.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.426.12010"
+          }
+        }
       }
     }
   },
@@ -136,6 +362,88 @@
       "sha512": "sha512-SQFNGQF4f7UfDXKxMzzGNMr3fjrPDIjLfmRvvVgDCw+dyvEHDaRfHuKA5q0Pr0/JW0Gcw89TxrxrS/MjwBvluQ==",
       "path": "microsoft.codeanalysis.csharp/5.3.0",
       "hashPath": "microsoft.codeanalysis.csharp.5.3.0.nupkg.sha512"
+    },
+    "Microsoft.Web.WebView2/1.0.3856.49": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-OOBKvFgK0pUKcndvTK6/jUsbrPRwce62Wt/0hkJWDsK2AcsJ2ylOS/mLa4xAcNUTOs96YIjpPN4AHMADXJcrgQ==",
+      "path": "microsoft.web.webview2/1.0.3856.49",
+      "hashPath": "microsoft.web.webview2.1.0.3856.49.nupkg.sha512"
+    },
+    "Microsoft.Web.WebView2.Core/1.0.3856.49": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.Web.WebView2.WinForms/1.0.3856.49": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.Web.WebView2.Wpf/1.0.3856.49": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "System.Windows.Forms/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "System.Drawing.Common/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "System.Windows.Forms.Primitives/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "System.Private.Windows.Core/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Accessibility/4.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "System.Private.Windows.GdiPlus/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.Win32.SystemEvents/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "System.Configuration.ConfigurationManager/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "System.Formats.Nrbf/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "System.Windows.Extensions/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "System.Diagnostics.EventLog/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "System.Security.Cryptography.ProtectedData/10.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
     }
   }
 }

@@ -68,11 +68,9 @@ namespace OzzieAI.Agentica
                 // Ensure the response content is extracted safely.
                 string condensedHistory = response?.Content?.ToString()?.Trim() ?? "Manual compression failed.";
 
-                // Visual feedback for the operator
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine($"\n[MEMORY]: Conciliated {middleGround.Count} messages into a single summary block.");
-                Console.ResetColor();
-
+                // Visual feedback for the operator:
+                ConsoleLogger.WriteLine($"\n[MEMORY]: Conciliated {middleGround.Count} messages into a single summary block.", ConsoleColor.Cyan);
+                
                 // Reconstruct the memory stream
                 return new List<ChatMessage>
                 {
@@ -90,9 +88,7 @@ namespace OzzieAI.Agentica
             catch (Exception ex)
             {
                 // Safety Fallback: If summarization fails, return the original history to avoid agent amnesia.
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"[MEMORY ERROR]: Conciliation failed: {ex.Message}");
-                Console.ResetColor();
+                ConsoleLogger.WriteLine($"[MEMORY ERROR]: Conciliation failed: {ex.Message}", ConsoleColor.Red);
                 return history;
             }
         }

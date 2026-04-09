@@ -25,12 +25,28 @@
         /// </summary>
         /// <param name="bus">The global communication bus for all agents.</param>
         /// <param name="liveCache">The persistent project-level cache for RAG and file tracking.</param>
-        /// <param name="provider">The primary LLM provider (Ollama, Gemini, or Grok).</param>
         public AgentFactory(IAgentBus bus, LiveCache liveCache)
         {
-        
             _bus = bus ?? throw new ArgumentNullException(nameof(bus));
             _sharedCache = liveCache ?? throw new ArgumentNullException(nameof(liveCache));
+        }
+
+        /// <summary>
+        /// Creates the Boss agent and starts its listening loop.
+        /// The Boss will then autonomously create Managers and Workers.
+        /// </summary>
+        public BossAgent CreateBoss(AgentConfig bossConfig, Dictionary<string, ILlmProvider> availableBrains)
+        {
+            var boss = new BossAgent(bossConfig, _bus, new DragonMemory(), availableBrains);
+
+            boss.Memory.AttachPersistentCache(_sharedCache);
+
+            // CRITICAL: Start the Boss listening
+            _ = Task.Run(async () => await boss.ListenAsync());
+
+            ConsoleLogger.WriteLine($"[FACTORY] Boss {bossConfig.Name} created and listening.", ConsoleColor.Cyan);
+
+            return boss;
         }
 
         /// <summary>
@@ -42,10 +58,10 @@
         /// <exception cref="ArgumentException">Thrown when an unsupported AgentRole is provided.</exception>
         public BaseAgent CreateAgent(AgentConfig config)
         {
+
             // 1. Instantiate the specific implementation based on Role
             BaseAgent agent = config.Role switch
             {
-                AgentRole.Boss => CreateBoss(config),
                 AgentRole.Manager => CreateManager(config),
                 AgentRole.Worker => CreateWorker(config),
                 _ => throw new ArgumentException($"[FACTORY ERROR] Unknown role: {config.Role}")
@@ -58,19 +74,9 @@
             // This allows the agent to begin receiving messages on the Bus immediately.
             _ = Task.Run(() => agent.ListenAsync());
 
-            Console.ForegroundColor = ConsoleColor.Gray;
-            Console.WriteLine($"[FACTORY] Successfully deployed {config.Name} as {config.Role}.");
-            Console.ResetColor();
+            ConsoleLogger.WriteLine($"[FACTORY] Successfully deployed {config.Name} as {config.Role}.", ConsoleColor.Gray);
 
             return agent;
-        }
-
-        /// <summary>
-        /// Internal: Spawns the Supreme Executive.
-        /// </summary>
-        private BossAgent CreateBoss(AgentConfig config)
-        {
-            return _currentBoss = new BossAgent(config, _bus, new DragonMemory());
         }
 
         /// <summary>
