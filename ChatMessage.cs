@@ -48,5 +48,12 @@ namespace OzzieAI.Agentica
             Role = role;
             Content = prompt;
         }
+
+        public ChatMessage(string role, string prompt, string toolName) : this(role, prompt)
+        {
+            Role = role; 
+            Content = prompt; 
+            ToolName = toolName;
+        }
     }
 }

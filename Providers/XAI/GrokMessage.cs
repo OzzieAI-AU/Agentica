@@ -5,10 +5,14 @@
 
     internal class GrokRequest
     {
-        [JsonPropertyName("model")] public string Model { get; set; } = "grok-2-vision-latest";
-        [JsonPropertyName("messages")] public List<GrokMessage> Messages { get; set; } = new();
-        [JsonPropertyName("stream")] public bool Stream { get; set; } = false;
-        [JsonPropertyName("tools")] public List<object>? Tools { get; set; }
+        [JsonPropertyName("model")] 
+        public string Model { get; set; } = "grok-2-vision-latest";
+        [JsonPropertyName("messages")] 
+        public List<GrokMessage> Messages { get; set; } = new();
+        [JsonPropertyName("stream")] 
+        public bool Stream { get; set; } = false;
+        [JsonPropertyName("tools")] 
+        public List<object>? Tools { get; set; }
     }
 
     internal class GrokMessage : IChatMessage

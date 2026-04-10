@@ -31,7 +31,7 @@ namespace OzzieAI.Agentica.Tools
         {
             // Visual alert for the user:
             ConsoleLogger.WriteLine($"\n[ACTION PENDING - APPROVAL REQUIRED]", ConsoleColor.Red);
-            ConsoleLogger.WriteLine($"Details: {jsonArguments}", ConsoleColor.White);
+            ConsoleLogger.WriteLine($"Details: {jsonArguments}", ConsoleColor.DarkBlue);
 
             // Prompt for user input
             Console.Write("Allow this action? (y/n): ");

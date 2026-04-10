@@ -73,7 +73,7 @@
             foreach (var msg in history)
             {
                 // Cast to the framework's concrete ChatMessage type (not the internal DTO)
-                var chatMsg = (ChatMessage)msg;
+                var chatMsg = msg;
 
                 // Create Grok-compatible message with normalized role (lowercase)
                 var grokMsg = new GrokMessage { Role = chatMsg.Role.ToLower() };
