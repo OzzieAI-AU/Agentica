@@ -72,73 +72,44 @@ One of Agentica's greatest strengths is its ability to assign different LLM prov
 
 ```C#
 
-Console.Title = "OzzieAI Agentica Framework";
-        ConsoleLogger.WriteLine("🤖 Initializing Agentica Swarm...");
+         // EV Names:
+        string GeminiEVName = "Gemini_API_KEY";
+        string GrokEVName = "Grok_API_KEY";
+
+        // Get API Keys
+        var geminiKey = Environment.GetEnvironmentVariable(GeminiEVName) ?? throw new Exception($"{GeminiEVName} not set in environment variables.");
+        var grokKey = Environment.GetEnvironmentVariable(GrokEVName) ?? throw new Exception($"{GrokEVName} not set in environment variables.");
+
+        Console.Title = "OzzieAI Agentica Framework";
+        ConsoleLogger.WriteLine("🤖 Initializing Agentica Swarm...", ConsoleColor.Red);
 
         // Infrastructure Setup
         string projectPath = Path.Combine(Directory.GetCurrentDirectory(), "Workspace");
 
         // 1. Initialize different providers
-        var geminiKey = Environment.GetEnvironmentVariable("Gemini_API_KEY") ?? throw new Exception("Gemini_API_KEY not set in environment variables.");
-        var grokKey = Environment.GetEnvironmentVariable("GROK_API_KEY") ?? throw new Exception("GROK_API_KEY not set in environment variables.");
-        var geminiBrain = new GeminiProvider(apiKey: geminiKey, model: "gemini-flash-latest");
-        var grokBrain = new GrokProvider(apiKey: grokKey, model: "grok-4.20-0309-reasoning");
-        var ollamaBrain = new OllamaProvider(model: "codellama:7b");
-
-        // 2. Setup Factory (No global brain anymore)
+        // In your Program.cs or main entry point
         var bus = new AgentBus();
-        var factory = new AgentFactory(bus, new LiveCache(projectPath));
+        var liveCache = new LiveCache("Workspace");
 
-        // 3. Create the Swarm with independent brains
-        var boss = (BossAgent)factory.CreateAgent(new AgentConfig
+        // All available brains (Boss chooses the best one for each role)
+        var brains = new Dictionary<string, ILlmProvider>
         {
-            Name = "Ozzie-CEO",
-            Role = AgentRole.Boss,
-            Provider = grokBrain
-        });
+            { "grok",   new GrokProvider(grokKey, model: "grok-4-1-fast-reasoning") },
+            { "gemini", new GeminiProvider(geminiKey, model: "gemini-flash-latest") },
+            { "ollama", new OllamaProvider(model: "gemma4:e2b") }
+        };
 
-        var manager = (ManagerAgent)factory.CreateAgent(new AgentConfig
-        {
-            Name = "PM-Alice",
-            Role = AgentRole.Manager,
-            Provider = grokBrain
-        });
+        // Init the Boss:
+        var bossConfig = new AgentConfig { Name = "Ozzie-CEO", Provider = new OllamaProvider("gemma4:e4b") };
+        var boss = new BossAgent(bossConfig, bus, new DragonMemory(bossConfig.Id), brains);
 
-        var worker = (WorkerAgent)factory.CreateAgent(new AgentConfig
-        {
-            Name = "Bob-Dev",
-            Role = AgentRole.Worker,
-            Provider = ollamaBrain
-        });
+        // Give the Boss ONE mission — it does everything else automatically
+        string mission = "Research best practices for a C# 64-bit sum implementation, create the file, and verify it with a terminal build command.";
 
-        // 4. Arming the Worker with your Uploaded Tools
-        worker.AddTool(new FileToolExecutor());     // The 'Hands'
-        worker.AddTool(new TerminalTool());         // The 'Action'
-        worker.AddTool(new CodeSafetyGateTool());   // The 'Guard'
-        worker.AddTool(new WebSearchTool());        // The 'Eyes'
+        await boss.ExecuteHighLevelMissionAsync(mission);
 
-        // Give the Manager 'Sight'
-        manager.AddTool(new ProjectAnalyzerTool());
-        manager.AssignWorker(worker.Config.Id);
-
-        // 5. The Mission
-        string mission = "Research best practices for a C# 64-bit sum implementation, " +
-                         "create the file, and verify it with a terminal build command.";
-
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        ConsoleLogger.WriteLine($"\n[MISSION START]: {mission}\n");
-        Console.ResetColor();
-
-        // Start the chain: Boss -> Manager
-        await bus.SendAsync(new AgentMessage(
-            boss.Config.Id,
-            manager.Config.Id,
-            MessageType.TaskAssignment,
-            mission,
-            DateTime.UtcNow));
-
-        // Keep the process alive
-        while (true) { await Task.Delay(1000); }
+        // Keep the app alive
+        await Task.Delay(Timeout.Infinite);
         
 ```
 
