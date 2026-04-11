@@ -35,7 +35,7 @@
         
             _model = model;
             _baseUrl = baseUrl.TrimEnd('/');
-            _http = new HttpClient { Timeout = TimeSpan.FromMinutes(7) };
+            _http = new HttpClient { Timeout = TimeSpan.FromMinutes(12) };
         }
 
 

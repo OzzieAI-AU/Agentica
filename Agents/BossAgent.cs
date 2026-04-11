@@ -52,6 +52,11 @@
         private readonly ConcurrentDictionary<string, string> _companySkills = new();
 
         /// <summary>
+        /// 
+        /// </summary>
+        public static string BossId { get; } = $"Boss-{Guid.NewGuid().ToString().Substring(0, 6)}";
+
+        /// <summary>
         /// Recurring timer that performs scheduled maintenance and heartbeat checks.
         /// Runs every 30 seconds to keep the Boss responsive and alive.
         /// </summary>
@@ -77,9 +82,18 @@
         private readonly Stopwatch _missionTimer = new();
 
         // ─────────────────────────────────────────────────────────────────────
+        // MISSION TRACKING STATE
+        // ─────────────────────────────────────────────────────────────────────
+        private readonly ConcurrentDictionary<string, double> _subtaskScores = new();
+        private readonly HashSet<string> _completedSubtasks = new();
+        private string _currentMission = string.Empty;
+        private bool _missionCompleted = false;
+
+        // ─────────────────────────────────────────────────────────────────────
         // CONSTRUCTOR
         // ─────────────────────────────────────────────────────────────────────
         /// <summary>
+        /// WARNING - ALWAYS START THE BOSS USING AGENTFACTORY!
         /// Initializes a new instance of the BossAgent class.
         /// 
         /// In addition to the standard BaseAgent dependencies, the Boss receives
@@ -97,9 +111,9 @@
 
             _availableBrains = availableBrains ?? throw new ArgumentNullException(nameof(availableBrains));
             Memory = memory ?? throw new ArgumentNullException(nameof(memory));
+
             // Start the recurring scheduler timer (fires every 30 seconds)
-            _scheduler = new Timer(async _ => await ExecuteScheduledTasksAsync(), null,
-                TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+            _scheduler = new Timer(async _ => await ExecuteScheduledTasksAsync(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -116,114 +130,113 @@
         /// <param name="mission">The high-level mission description provided by the user.</param>
         public async Task ExecuteHighLevelMissionAsync(string mission)
         {
-        
+
             // 1. Start timing the mission
             _missionTimer.Restart();
+            _missionCompleted = false;
+            _subtaskScores.Clear();
+            _completedSubtasks.Clear();
 
-            // 2. Log the received mission
-            ConsoleLogger.WriteLine($"[Boss {Config.Name}] Received mission: {mission}", ConsoleColor.Cyan);
-            ConsoleLogger.WriteLine($"[Boss {Config.Name}] Reasoning with LLM to generate optimal swarm topology...", ConsoleColor.DarkGray);
+            _currentMission = mission;
+
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] Received mission: {mission}", ConsoleColor.Cyan);
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] Reasoning with LLM to generate optimal swarm topology...", ConsoleColor.DarkGray);
 
             SwarmDeploymentPlan? deploymentPlan = null;
             int maxRetries = 3;
             int attempt = 0;
 
-            // 3. Planning Loop with Retry Logic
+            // 2. Planning Loop with Retry Logic
             while (attempt < maxRetries && deploymentPlan == null)
             {
                 attempt++;
                 try
                 {
-                    // Strict Prompting for the LLM to guarantee JSON conformity
                     string planningPrompt = $@"
-        You are the Boss AI orchestrating an autonomous agent swarm. 
-        Analyze the following mission and design the optimal hierarchy (1 Manager and N Workers) to complete it.
+You are the Boss AI orchestrating an autonomous agent swarm. 
+Analyze the following mission and design the optimal hierarchy (1 Manager and N Workers) to complete it.
         
-        MISSION: {mission}
+MISSION: {mission}
         
-        REQUIREMENTS:
-        1. Provide a clever, role-specific name for the Manager.
-        2. Define the exact Workers needed (e.g., Researcher, Coder, Architect). Give them descriptive names.
-        3. Write highly detailed, strict, and accurate prompts for EACH worker. 
-        4. Crucial: Define the sequence of operations in the prompts (e.g., 'Wait for X result, then perform Y').
-        
-        OUTPUT FORMAT:
-        You MUST output ONLY valid JSON. No markdown formatting, no explanations.
-        You MUST WRAP the entire JSON in SINGLE QUOTE code tags like this:
-        ```json
-        {{
-          ""manager_name"": ""string"",
-          ""manager_directive"": ""string"",
-          ""workers"": [
-            {{
-              ""worker_name"": ""string"",
-              ""system_prompt"": ""string""
-            }}
-          ]
-        }}
-        ```";
+REQUIREMENTS:
+1. Provide a clever, role-specific name for the Manager.
+2. Define the exact Workers needed (Researcher/Analyst, Coder/Implementer, Validator/Verifier, etc.).
+3. Write highly detailed, strict, and accurate system prompts for EACH worker.
+4. Define the exact sequence of operations in each worker's prompt.
 
-                    var response = await Provider.GenerateResponseAsync(new List<IChatMessage> { new ChatMessage("user", planningPrompt) });
+OUTPUT FORMAT:
+You MUST output ONLY valid JSON. No markdown, no explanations.
+Wrap the JSON in ```json ... ```.
+
+```json
+{{
+  ""manager_name"": ""string"",
+  ""manager_directive"": ""string"",
+  ""workers"": [
+    {{
+      ""worker_name"": ""string"",
+      ""system_prompt"": ""string""
+    }}
+  ]
+}}
+```";
+
+                    var response = await Provider.GenerateResponseAsync(new List<IChatMessage>
+                    {
+                        new ChatMessage("user", planningPrompt)
+                    });
+
                     string rawContent = response.Content ?? string.Empty;
-
-                    // Clean the content: Remove the single-quoted code blocks if present
                     string cleanedJson = rawContent.Replace("```json", "").Replace("```", "").Trim();
 
                     deploymentPlan = System.Text.Json.JsonSerializer.Deserialize<SwarmDeploymentPlan>(cleanedJson);
                 }
                 catch (Exception ex)
                 {
-                    ConsoleLogger.WriteLine($"[Boss {Config.Name}] ⚠️ Planning attempt {attempt} failed: {ex.Message}", ConsoleColor.Yellow);
+                    ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] ⚠️ Planning attempt {attempt} failed: {ex.Message}", ConsoleColor.Yellow);
                     if (attempt >= maxRetries)
                         throw new Exception("Boss failed to generate a valid Swarm Deployment Plan after 3 attempts.");
 
-                    await Task.Delay(500); // Brief pause before retry
+                    await Task.Delay(500);
                 }
             }
 
-            if (deploymentPlan == null) return;
+            if (deploymentPlan == null)
+                return;
 
-            // 4. Execute the Deployment Plan
-            ConsoleLogger.Success($"[Boss {Config.Name}] Swarm topology finalized. Spawning {deploymentPlan.Workers.Count} specialized agents...");
+            // 3. Record the total number of subtasks (workers) for this mission
+            int totalSubTasks = deploymentPlan.Workers.Count;
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] Swarm topology finalized. {totalSubTasks} workers planned.", ConsoleColor.Cyan);
 
-            // 5. Start Manager and give it its directive
-            var manager = StartManager(deploymentPlan.ManagerName, _availableBrains.GetValueOrDefault("grok") ?? _availableBrains["ollama"], Memory);
+            // 4. Start Manager
+            var manager = StartManager(deploymentPlan.ManagerName, _availableBrains.GetValueOrDefault("ollama") ?? _availableBrains.Values.First(), Memory);
             _currentManager = manager;
 
-            // 6. Spawn Workers and assign their LLM-generated prompts
+            // Send directive to Manager
+            await Bus.SendAsync(new AgentMessage(Config.Id, manager.Config.Id, MessageType.TaskAssignment,
+                $"DIRECTIVE: {deploymentPlan.ManagerDirective}\n\nMISSION: {mission}\n\nYou are responsible for coordinating all workers and only escalating high-quality results.",
+                DateTime.UtcNow));
+
+            // 5. Spawn Workers with throttling
             foreach (var workerPlan in deploymentPlan.Workers)
             {
-                await Task.Delay(800); // Throttling for stability
+                await Task.Delay(800); // Stability throttle
 
-                var worker = StartWorker(workerPlan.WorkerName, _availableBrains["ollama"], Memory);
+                var worker = StartWorker(workerPlan.WorkerName, _availableBrains.GetValueOrDefault("ollama") ?? _availableBrains.Values.First(), Memory);
 
                 await Bus.SendAsync(new AgentMessage(Config.Id, worker.Config.Id, MessageType.TaskAssignment,
                     workerPlan.SystemPrompt, DateTime.UtcNow));
 
-                ConsoleLogger.WriteLine($"[Boss {Config.Name}] Assigned role '{workerPlan.WorkerName}' with custom LLM prompt.", ConsoleColor.DarkCyan);
+                ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] Assigned role '{workerPlan.WorkerName}'", ConsoleColor.DarkCyan);
             }
 
-            // Send the high-level directive to the Manager
+            // 6. Send swarm ready handshake
+            await Task.Delay(300);
             await Bus.SendAsync(new AgentMessage(Config.Id, manager.Config.Id, MessageType.TaskAssignment,
-                $"DIRECTIVE: {deploymentPlan.ManagerDirective}\nMISSION: {mission}", DateTime.UtcNow));
+                "SWARM_READY: All workers spawned. Begin coordinating with quality gates. Only escalate results with score >= 8.0.",
+                DateTime.UtcNow));
 
-            // 7. Optional: Send a lightweight status/handshake to the Manager so it knows the full swarm is ready
-            if (_currentManager != null)
-            {
-                await Task.Delay(300); // Gentle throttle for startup stability
-
-                await Bus.SendAsync(new AgentMessage(
-                    Config.Id,
-                    _currentManager.Config.Id,
-                    MessageType.TaskAssignment,
-                    "SWARM_READY: All workers have been spawned and assigned roles. Begin coordinating tasks as they arrive. Maintain quality gates on all results.",
-                    DateTime.UtcNow));
-
-                ConsoleLogger.WriteLine($"[Boss {Config.Name}] 📡 Sent swarm-ready handshake to Manager", ConsoleColor.DarkGray);
-            }
-
-            // 8. Final success confirmation
-            ConsoleLogger.Success($"[Boss {Config.Name}] Dynamic swarm successfully deployed for mission: {mission}");
+            ConsoleLogger.Success($"[{Config.Name} - (Boss)] Dynamic swarm deployed with {totalSubTasks} workers for mission.");
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -256,9 +269,9 @@
             var manager = new ManagerAgent(config, Bus, memory);
 
             Bus.RegisterAgent(config.Id);
-            _ = Task.Run(async () => await manager.ListenAsync());
+            _ = Task.Run(async () => await manager.ListenAsync(config));
 
-            ConsoleLogger.WriteLine($"[Boss {Config.Name}] ✅ Manager started → {managerName} (ID: {config.Id}, Parent: {config.ParentId})", ConsoleColor.Cyan);
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] ✅ Manager started → {managerName} (ID: {config.Id}, Parent: {config.ParentId})", ConsoleColor.Cyan);
 
             return manager;
         }
@@ -289,20 +302,81 @@
 
             // Load standard toolset for all workers
             worker.AddTool(new WebSearchTool());
-            worker.AddTool(new FileToolExecutor());
             worker.AddTool(new TerminalTool());
             worker.AddTool(new CodeSafetyGateTool());
+            worker.AddTool(new FileToolExecutor());   // ← Critical for writing files
+            worker.AddTool(new ProjectAnalyzerTool()); // optional but helpful
 
             Bus.RegisterAgent(config.Id);
 
             // Register this worker with the current Manager for task delegation
             if (_currentManager != null) _currentManager.AssignWorker(config.Id);
 
-            _ = Task.Run(async () => await worker.ListenAsync());
+            _ = Task.Run(async () => await worker.ListenAsync(config));
 
-            ConsoleLogger.WriteLine($"[Boss {Config.Name}] ✅ Worker started → {workerName} (ID: {config.Id}) with tools loaded", ConsoleColor.Cyan);
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] ✅ Worker started → {workerName} (ID: {config.Id}) with tools loaded", ConsoleColor.Cyan);
 
             return worker;
+        }
+
+        /// <summary>
+        /// Tracks completion of individual subtasks (workers) and declares the entire mission complete
+        /// only when ALL planned subtasks have reached the quality threshold (>= 8.0).
+        /// </summary>
+        private async Task TrackSubtaskCompletionAsync(AgentMessage message)
+        {
+
+            if (_missionCompleted) 
+                return;
+
+            // Determine which subtask this result belongs to
+            string subtaskName = "Unknown";
+
+            if (message.SenderId.Contains("Analyst", StringComparison.OrdinalIgnoreCase) ||
+                message.SenderId.Contains("Strategist", StringComparison.OrdinalIgnoreCase) ||
+                message.SenderId.Contains("Research", StringComparison.OrdinalIgnoreCase))
+                subtaskName = "Research";
+
+            else if (message.SenderId.Contains("Implementer", StringComparison.OrdinalIgnoreCase) ||
+                     message.SenderId.Contains("Coder", StringComparison.OrdinalIgnoreCase) ||
+                     message.SenderId.Contains("Architect", StringComparison.OrdinalIgnoreCase))
+                subtaskName = "CodeGeneration";
+
+            else if (message.SenderId.Contains("Validator", StringComparison.OrdinalIgnoreCase) ||
+                     message.SenderId.Contains("DevOps", StringComparison.OrdinalIgnoreCase) ||
+                     message.SenderId.Contains("Verifier", StringComparison.OrdinalIgnoreCase))
+                subtaskName = "Verification";
+
+            // Extract score from message if available
+            double score = 7.5; // safe default
+            var match = System.Text.RegularExpressions.Regex.Match(message.Content ?? "", @"Score:\s*(\d+\.?\d*)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (match.Success && double.TryParse(match.Groups[1].Value, out double parsedScore))
+                score = parsedScore;
+
+            _subtaskScores[subtaskName] = score;
+
+            if (score >= 8.0)
+                _completedSubtasks.Add(subtaskName);
+
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] 📊 Subtask '{subtaskName}' completed with score {score:F1}/10",
+                score >= 8.0 ? ConsoleColor.Green : ConsoleColor.Yellow);
+
+            // Check if ALL subtasks are complete to standard
+            bool allSubtasksDone = _completedSubtasks.Count >= 3 &&
+                                  _completedSubtasks.Contains("Research") &&
+                                  _completedSubtasks.Contains("CodeGeneration") &&
+                                  _completedSubtasks.Contains("Verification");
+
+            if (allSubtasksDone && !_missionCompleted)
+            {
+                _missionCompleted = true;
+                _missionTimer.Stop();
+
+                ConsoleLogger.Success($"[{Config.Name} - (Boss)] 🎉 ALL SUBTASKS PASSED QUALITY THRESHOLD!");
+                ConsoleLogger.WriteLine($"Mission completed in {_missionTimer.Elapsed.TotalSeconds:F1} seconds", ConsoleColor.Green);
+
+                GenerateProfessionalReport();
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -314,7 +388,7 @@
         /// </summary>
         private async Task ExecuteScheduledTasksAsync()
         {
-            ConsoleLogger.WriteLine($"[Boss {Config.Name}] Heartbeat check...", ConsoleColor.DarkMagenta);
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] Heartbeat check...", ConsoleColor.DarkMagenta);
             await Task.CompletedTask;
         }
 
@@ -330,7 +404,7 @@
         protected override async Task ProcessIncomingMessageAsync(AgentMessage message)
         {
 
-            ConsoleLogger.WriteLine($"[Boss {Config.Name}] 📥 Received {message.Type} from {message.SenderId}", ConsoleColor.DarkBlue);
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] 📥 Received {message.Type} from {message.SenderId}", ConsoleColor.DarkBlue);
 
             switch (message.Type)
             {
@@ -342,10 +416,11 @@
                     // Store every task result as company knowledge
                     string skillKey = $"TaskResult_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
                     StoreCompanySkill(skillKey, message.Content);
+                    await TrackSubtaskCompletionAsync(message);   // ← This is the key line
                     break;
 
                 default:
-                    ConsoleLogger.WriteLine($"[Boss {Config.Name}] ⚠️ Received unknown message type: {message.Type}", ConsoleColor.Yellow);
+                    ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] ⚠️ Unknown message type", ConsoleColor.Yellow);
                     break;
             }
         }
@@ -360,41 +435,71 @@
         /// Then provides an LLM-generated decision back to the requester.
         /// </summary>
         /// <param name="message">The DecisionRequest message.</param>
+        /// <summary>
+        /// Handles incoming decision requests. If the request comes from the final 
+        /// stage of the pipeline, it triggers the end-of-mission reporting.
+        /// </summary>
         private async Task HandleDecisionRequestAsync(AgentMessage message)
         {
+            // CRITICAL FIX: Broaden the check to include various naming conventions for the final stage.
+            bool isFinalStage = message.SenderId.Contains("Builder", StringComparison.OrdinalIgnoreCase) ||
+                                message.SenderId.Contains("Verifier", StringComparison.OrdinalIgnoreCase) ||
+                                message.SenderId.Contains("Validator", StringComparison.OrdinalIgnoreCase);
 
-            string skillKey = $"CompanySkill_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-            StoreCompanySkill(skillKey, message.Content);
-
-            // Print summary of all accumulated company skills
-            if (_companySkills.Count > 0)
-            {
-                ConsoleLogger.WriteLine($"\n[ Boss {Config.Name} ] 📚 SUMMARY OF KNOWLEDGE GAINED:", ConsoleColor.Magenta);
-                foreach (var skill in _companySkills)
-                {
-                    string preview = skill.Value.Length > 400 ? skill.Value.Substring(0, 400) + "..." : skill.Value;
-                    ConsoleLogger.WriteLine($" • {skill.Key}: {preview}", ConsoleColor.Cyan);
-                }
-                ConsoleLogger.WriteLine($" Total company skills: {_companySkills.Count}\n", ConsoleColor.Magenta);
-            }
-
-            // If Builder is reporting completion, stop timer and generate final report
-            if (message.SenderId.Contains("Builder"))
+            if (isFinalStage)
             {
                 _missionTimer.Stop();
-                ConsoleLogger.WriteLine($"[Boss {Config.Name}] 🎉 Mission completed in {_missionTimer.Elapsed.TotalSeconds:F1} seconds. Generating final professional report...", ConsoleColor.Green);
-                GenerateProfessionalReport();
+
+                ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] 🎉 MISSION ACCOMPLISHED", ConsoleColor.Green);
+                ConsoleLogger.WriteLine($" Total Time: {_missionTimer.Elapsed.TotalSeconds:F1}s", ConsoleColor.Cyan);
+
+                // Finalize the project and open the report
+                await GenerateProfessionalReport();
             }
+            else
+            {
+                // Handle other types of decisions (e.g. strategy pivots)
+                await ProcessStandardDecision(message);
+            }
+        }
 
-            // Generate a decision using the Boss's own LLM provider
-            string projectState = Memory.PersistentCache?.BuildAsciiGraph() ?? "No project map.";
-            string prompt = $"Project Context:\n{projectState}\n\nDecision needed from Boss: {message.Content}";
+        /// <summary>
+        /// Handles non-terminal decision requests by utilizing the Boss's LLM 
+        /// to provide strategic guidance back to the requesting agent.
+        /// </summary>
+        /// <param name="message">The incoming decision request message.</param>
+        private async Task ProcessStandardDecision(AgentMessage message)
+        {
 
-            var response = await Provider.GenerateResponseAsync(new List<IChatMessage> { new ChatMessage("user", prompt) });
-            string decision = response.Content ?? "Proceed with caution.";
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] 🤔 Deliberating on decision for {message.SenderId}...", ConsoleColor.Magenta);
 
-            // Send decision response back to the requesting agent
-            await Bus.SendAsync(new AgentMessage(Config.Id, message.SenderId, MessageType.DecisionResponse, decision, DateTime.Now));
+            // 1. Prepare the prompt for the Boss's strategic brain
+            var decisionPrompt = $@"
+You are the Boss AI. An agent in your swarm has requested a strategic decision.
+REQUESTER: {message.SenderId}
+REQUEST CONTENT: {message.Content}
+
+Review the current mission context and provide a clear, authoritative decision or guidance.
+MISSION: {_currentMission}
+";
+
+            // 2. Generate the decision using the Boss's LLM provider
+            var response = await Provider.GenerateResponseAsync(new List<IChatMessage>
+    {
+        new ChatMessage("user", decisionPrompt)
+    });
+
+            string decision = response.Content ?? "Proceed with current tactical plan.";
+
+            // 3. Send the response back to the requester
+            await Bus.SendAsync(new AgentMessage(
+                SenderId: Config.Id,
+                ReceiverId: message.SenderId,
+                Type: MessageType.DecisionResponse,
+                Content: decision,
+                Timestamp: DateTime.UtcNow));
+
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] 📤 Decision dispatched to {message.SenderId}", ConsoleColor.DarkMagenta);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -409,7 +514,7 @@
         /// background (non-blocking) so it never interferes with swarm operations.
         /// Automatically opens the report in the default browser.
         /// </summary>
-        private void GenerateProfessionalReport()
+        private Task GenerateProfessionalReport()
         {
             // Fire-and-forget background task to keep the swarm responsive
             _ = Task.Run(() =>
@@ -488,17 +593,24 @@
 
                     File.WriteAllText(path, template);
 
-                    ConsoleLogger.WriteLine($"[Boss {Config.Name}] 📄 Professional report generated and saved: {fileName}", ConsoleColor.Green);
+                    ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] 📄 Professional report generated and saved: {fileName}", ConsoleColor.Green);
 
                     // Automatically open the generated report in the default browser
                     try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
-                    catch { /* Silently ignore if opening fails (e.g., headless environment) */ }
+                    catch { /* Silently ignore if opening fails (e.g., headless environment) */
+                        return Task.CompletedTask;
+                    
+                    }
                 }
                 catch (Exception ex)
                 {
-                    ConsoleLogger.WriteLine($"[Boss {Config.Name}] ❌ Report generation failed: {ex.Message}", ConsoleColor.Red);
+                    ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] ❌ Report generation failed: {ex.Message}", ConsoleColor.Red);
                 }
+
+                return Task.CompletedTask;
             });
+
+            return Task.CompletedTask;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -515,7 +627,7 @@
         {
             _companySkills[skillName] = skillData;
             Memory.Remember(skillName, skillData, propagate: false);
-            ConsoleLogger.WriteLine($"[Boss {Config.Name}] 📚 Stored company skill: {skillName}", ConsoleColor.DarkGreen);
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Boss)] 📚 Stored company skill: {skillName}", ConsoleColor.DarkGreen);
         }
     }
 }

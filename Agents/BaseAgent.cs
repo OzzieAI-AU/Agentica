@@ -123,13 +123,14 @@
         /// This method is fire-and-forget and never completes unless the bus itself is disposed.
         /// Every incoming message is processed on a separate Task to guarantee non-blocking behavior.
         /// </summary>
-        public async Task ListenAsync()
+        public async Task ListenAsync(AgentConfig config)
         {
             // 1. Acquire a dedicated reader for this agent's unique channel ID
-            var reader = Bus.GetReader(Config.Id);
+            Config = config;
+            var reader = Bus.GetReader(config.Id);
 
             // 2. Beautiful diagnostic log confirming the agent has entered listening state
-            ConsoleLogger.WriteLine($"[Agent {Config.Name}] ?? Listening started on channel {Config.Id}", ConsoleColor.DarkGray);
+            ConsoleLogger.WriteLine($"[Agent {config.Name}] ?? Listening started on channel {config.Id}", ConsoleColor.DarkGray);
 
             // 3. The infinite async enumeration over the channel — this is the "Observe" part of the cycle
             await foreach (var message in reader.ReadAllAsync())
@@ -146,7 +147,7 @@
                     catch (Exception ex)
                     {
                         // 6. Critical error logging — the only place a listen error is allowed to surface
-                        ConsoleLogger.WriteLine($"[Agent {Config.Name}] 💥 CRITICAL LISTEN ERROR: {ex.Message}", ConsoleColor.Red);
+                        ConsoleLogger.WriteLine($"[Agent {config.Name}] 💥 CRITICAL LISTEN ERROR: {ex.Message}", ConsoleColor.Red);
                     }
                 });
             }
@@ -175,11 +176,14 @@
         /// <param name="taskDescription">Human-readable goal for this reasoning session.</param>
         protected async Task StartTaskAsync(string taskDescription)
         {
-            // 1. Reset memory to begin with a clean slate for this new task
+            // Fix: Always clear and rebuild the system prompt using the LATEST Config
             Memory.History.Clear();
 
+            // Explicitly pull the BossId from the current state of Config
+            string bossInfo = !string.IsNullOrEmpty(Config.BossId) ? $" Your Boss is {Config.BossId}." : "";
+
             // 2. Inject the authoritative system prompt that defines the agent's persona and mission
-            Memory.History.Add(new ChatMessage("system", $"You are {Config.Name}. Your task: {taskDescription}"));
+            Memory.History.Add(new ChatMessage("system", $"You are {Config.Name}. ID: {Config.Id}.{bossInfo} Task: {taskDescription}"));
 
             // 3. Initialize step counter for the safety limit
             int step = 0;

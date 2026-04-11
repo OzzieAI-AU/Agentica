@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 
 namespace OzzieAI.Agentica
 {
+
     /// <summary>
     /// Represents a single file entry in the LiveCache with rich metadata.
     /// Supports scoring for LLM-driven code perfection workflows.
@@ -206,6 +207,7 @@ namespace OzzieAI.Agentica
         /// </summary>
         private readonly ConcurrentDictionary<string, CachedFile> _files = new(StringComparer.OrdinalIgnoreCase);
 
+        private readonly object _saveLock = new();
         private FileSystemWatcher? _watcher;
         private readonly object _lock = new object();
         private bool IncludeFileContents = true;
@@ -233,7 +235,7 @@ namespace OzzieAI.Agentica
         {
 
             if (string.IsNullOrWhiteSpace(rootDirectory) || !Directory.Exists(rootDirectory))
-                Directory.CreateDirectory(rootDirectory);
+                throw new DirectoryNotFoundException($"Root directory not found: {rootDirectory}");
 
             _rootDirectory = Path.GetFullPath(rootDirectory);
             _cacheFilePath = Path.Combine(_rootDirectory, ".livecache.json");
@@ -261,32 +263,69 @@ namespace OzzieAI.Agentica
                             file.RefreshFromDisk();
                             _files[file.FullPath] = file;
                         }
+                        // CRITICAL FIX: Re-hydrate virtual skills that are not physical files.
+                        // Real files have rooted paths (e.g., C:\...), while skill keys do not.
+                        else if (!Path.IsPathRooted(file.FullPath))
+                        {
+                            _files[file.FullPath] = file;
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
-                ConsoleLogger.WriteLine($"Warning: Failed to load LiveCache from disk: {ex.Message}", ConsoleColor.Red);
+                Console.WriteLine($"Warning: Failed to load LiveCache from disk: {ex.Message}");
             }
         }
 
         /// <summary>
         /// Saves the current cache state to disk (thread-safe).
         /// </summary>
-        public void SaveToDisk()
+        private void SaveToDisk()
         {
-            lock (_lock)
+            lock (_saveLock) // Prevent "file in use" exceptions
             {
                 try
                 {
-                    var fileList = _files.Values.ToList();
-                    string json = JsonSerializer.Serialize(fileList, _jsonOptions);
+                    var json = JsonSerializer.Serialize(_files.Values);
                     File.WriteAllText(_cacheFilePath, json);
                 }
                 catch (Exception ex)
                 {
-                    ConsoleLogger.WriteLine($"Error saving LiveCache: {ex.Message}", ConsoleColor.Red);
+                    ConsoleLogger.WriteLine($"[CACHE ERROR] {ex.Message}", ConsoleColor.Red);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Persists non-file tactical knowledge (Skills) directly into the LiveCache JSON.
+        /// This creates a virtual file entry, fulfilling the 'External Cortex' requirement 
+        /// to ensure hard-won technical discoveries survive system reboots.
+        /// </summary>
+        /// <param name="key">The unique identifier for the learned skill.</param>
+        /// <param name="content">The actual tactical knowledge to persist.</param>
+        /// <param name="score">The perfection score assigned to the knowledge (0-100).</param>
+        public void SaveSkillToCache(string key, string content, int score)
+        {
+
+            lock (_lock)
+            {
+                // Treat the skill key as a virtual pseudo-path
+                var virtualFile = _files.GetOrAdd(key, k => new CachedFile
+                {
+                    FullPath = k,
+                    FileName = k,
+                    IsText = true,
+                    Created = DateTime.UtcNow
+                });
+
+                virtualFile.Content = content;
+                virtualFile.Score = Math.Clamp(score, 0, 100);
+                virtualFile.LastModified = DateTime.UtcNow;
+                virtualFile.Notes = "Auto-saved Tactical Skill";
+
+                OnCacheChanged?.Invoke(this, EventArgs.Empty);
+                SaveToDisk();
             }
         }
 
@@ -657,7 +696,7 @@ namespace OzzieAI.Agentica
         {
             // Safe cross-thread logging (if you have rtbMain accessible, or raise event)
             // For now, Console + optional event
-            ConsoleLogger.WriteLine(text, ConsoleColor.DarkGray);
+            Console.WriteLine(text);
             // You can add an event for UI if desired
         }
 

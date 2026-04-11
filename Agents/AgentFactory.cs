@@ -36,18 +36,21 @@
         /// Creates the Boss agent and starts its listening loop.
         /// The Boss will then autonomously create Managers and Workers.
         /// </summary>
-        public BossAgent CreateBoss(AgentConfig bossConfig, Dictionary<string, ILlmProvider> availableBrains)
+        public BossAgent CreateBoss(AgentConfig config, Dictionary<string, ILlmProvider> availableBrains)
         {
-            var boss = new BossAgent(bossConfig, _bus, new DragonMemory(bossConfig.Id), availableBrains);
 
-            boss.Memory.AttachPersistentCache(_sharedCache);
+            // 1. Beautify the Boss ID to match the swarm pattern
+            config.Id = config.BossId;
 
-            // CRITICAL: Start the Boss listening
-            _ = Task.Run(async () => await boss.ListenAsync());
+            // 2. REGISTER the Boss so it can receive TaskResults
+            _bus.RegisterAgent(config.Id);
 
-            ConsoleLogger.WriteLine($"[FACTORY] Boss {bossConfig.Name} created and listening.", ConsoleColor.Cyan);
+            var boss = new BossAgent(config, _bus, new DragonMemory(config.Id), availableBrains);
 
-            return boss;
+            // 3. START the listening loop
+            _ = Task.Run(() => boss.ListenAsync(config));
+
+            return _currentBoss = boss;
         }
 
         /// <summary>
@@ -73,7 +76,7 @@
 
             // 3. Activate the Agent's non-blocking listener
             // This allows the agent to begin receiving messages on the Bus immediately.
-            _ = Task.Run(() => agent.ListenAsync());
+            _ = Task.Run(() => agent.ListenAsync(config));
 
             ConsoleLogger.WriteLine($"[FACTORY] Successfully deployed {config.Name} as {config.Role}.", ConsoleColor.Gray);
 
@@ -85,9 +88,15 @@
         /// </summary>
         private ManagerAgent CreateManager(AgentConfig config)
         {
+            // 1. Ensure the Manager knows who its Boss is BEFORE instantiation
+            if (_currentBoss != null)
+            {
+                config.ParentId = _currentBoss.Config.Id;
+            }
+
             var manager = new ManagerAgent(config, _bus, new DragonMemory(config.Id));
 
-            // Cognitive Bonding: Manager learns from the Boss's strategic decisions
+            // 2. Cognitive Bonding: Manager learns from the Boss's strategic decisions
             if (_currentBoss != null)
                 manager.Memory.AddUpstream(_currentBoss.Memory);
 
@@ -100,9 +109,19 @@
         /// </summary>
         private WorkerAgent CreateWorker(AgentConfig config)
         {
+            // 1. Hierarchical Wiring: Assign the direct Parent/Boss ID
+            if (_currentManager != null)
+            {
+                config.ParentId = _currentManager.Config.Id;
+            }
+            else if (_currentBoss != null)
+            {
+                config.ParentId = _currentBoss.Config.Id;
+            }
+
             var worker = new WorkerAgent(config, _bus, new DragonMemory(config.Id));
 
-            // Cognitive Bonding: Worker learns from the direct Manager or the Boss
+            // 2. Cognitive Bonding: Establish memory inheritance
             if (_currentManager != null)
                 worker.Memory.AddUpstream(_currentManager.Memory);
             else if (_currentBoss != null)

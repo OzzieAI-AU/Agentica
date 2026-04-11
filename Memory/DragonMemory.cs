@@ -115,14 +115,29 @@ namespace OzzieAI.Agentica
         /// <summary>
         /// Core "Remember" method – stores knowledge and propagates upstream exactly as described in the README.
         /// </summary>
+        /// <summary>
+        /// Core "Remember" method – stores knowledge and propagates upstream exactly as described in the README.
+        /// </summary>
+        /// <param name="key">The identifier for the knowledge.</param>
+        /// <param name="knowledge">The data or skill content.</param>
+        /// <param name="propagate">Whether to bubble this knowledge up to the Manager/Boss.</param>
         public void Remember(string key, string knowledge, bool propagate = true)
         {
+
             _tacticalSkills[key] = knowledge;
 
-            // Mirror to persistent cache if it looks like a file
-            if (PersistentCache != null && (key.EndsWith(".cs") || key.Contains('/') || key.Contains('\\')))
+            if (PersistentCache != null)
             {
-                PersistentCache.UpdateFileContentAndScore(key, knowledge, 80, "Auto-saved by DragonMemory");
+                // CRITICAL FIX: If the key looks like a physical file, update the physical file.
+                // Otherwise, save it directly into the JSON as a virtual tactical skill.
+                if (key.EndsWith(".cs") || key.Contains('/') || key.Contains('\\'))
+                {
+                    PersistentCache.UpdateFileContentAndScore(key, knowledge, 80, "Auto-saved by DragonMemory");
+                }
+                else
+                {
+                    PersistentCache.SaveSkillToCache(key, knowledge, 80);
+                }
             }
 
             if (propagate)
@@ -134,7 +149,7 @@ namespace OzzieAI.Agentica
                 }
             }
 
-            ConsoleLogger.WriteLine($"[DragonMemory {_agentId}] 💡 Remembered & propagated: {key}", ConsoleColor.DarkGreen);
+            ConsoleLogger.WriteLine($"[DragonMemory {_agentId}] 💡 Remembered & persisted: {key}", ConsoleColor.DarkGreen);
         }
 
         /// <summary>

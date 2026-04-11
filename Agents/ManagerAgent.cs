@@ -193,7 +193,7 @@
             /// Prevents null-reference or silent failures.
             /// </summary>
             {
-                ConsoleLogger.Warning($"[Manager {Config.Name}] No workers available for task {taskId}");
+                ConsoleLogger.Warning($"[{Config.Name} - (Manager)] No workers available for task {taskId}");
                 // Logs a clear warning when delegation cannot proceed.
 
                 return;
@@ -259,7 +259,7 @@
             /// Sends the actual task assignment message to the selected worker via the shared message bus.
             /// </summary>
 
-            ConsoleLogger.WriteLine($"[Manager {Config.Name}] 🔀 Delegated task {taskId} to {selectedWorker} (round-robin)", ConsoleColor.DarkCyan);
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Manager)] 🔀 Delegated task {taskId} to {selectedWorker} (round-robin)", ConsoleColor.DarkCyan);
             /// <summary>
             /// Logs the delegation action with a distinct color for easy tracing in console output.
             /// </summary>
@@ -328,14 +328,14 @@ CONTENT TO REVIEW:
 
                 _taskScores[taskId] = score;
 
-                ConsoleLogger.WriteLine($"[Manager {Config.Name}] 📊 Review score for {senderType}: {score:F1}/10",
+                ConsoleLogger.WriteLine($"[{Config.Name} - (Manager)] 📊 Review score for {senderType}: {score:F1}/10",
                     score >= 8.0 ? ConsoleColor.Green : ConsoleColor.Yellow);
 
                 return (score, feedback, shouldEscalate);
             }
             catch (Exception ex)
             {
-                ConsoleLogger.Warning($"[Manager {Config.Name}] Review failed: {ex.Message}. Defaulting to safe pass (score 7.0).");
+                ConsoleLogger.Warning($"[{Config.Name} - (Manager)] Review failed: {ex.Message}. Defaulting to safe pass (score 7.0).");
                 return (7.0, "Review parsing failed - proceeding cautiously", true);
             }
         }
@@ -357,240 +357,128 @@ CONTENT TO REVIEW:
         private async Task HandleWorkerResultAsync(AgentMessage message)
         {
 
-            /// <summary>
-            /// Identifies what kind of worker sent the result (for specialized handling).
-            /// </summary>
-            string senderType = DetermineSenderType(message.SenderId);
-
-            /// <summary>
-            /// Generates a short unique task ID for tracking retries and scores.
-            /// </summary>
+            string senderId = message.SenderId;
+            string senderType = DetermineSenderType(senderId);
             string taskId = Guid.NewGuid().ToString("N").Substring(0, 8);
 
-            /// <summary>
-            /// Creates a timestamped key for storing the raw result as company knowledge.
-            /// </summary>
-            string skillKey = $"{senderType}_Result_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Manager)] 📥 Received result from {senderType} ({senderId})", ConsoleColor.Blue);
 
-            /// <summary>
-            /// Logs the start of result processing.
-            /// </summary>
-            ConsoleLogger.WriteLine($"[Manager {Config.Name}] 📥 Processing {senderType} result from {message.SenderId}", ConsoleColor.Blue);
+            LearnSkill($"{senderType}_Result_{DateTime.UtcNow:yyyyMMdd_HHmmss}", message.Content);
 
-            /// <summary>
-            /// 1. Always learn the raw result first
-            /// Stores the raw output in the Manager's knowledge base immediately.
-            /// </summary>
-            LearnSkill(skillKey, message.Content);
-
-            /// <summary>
-            /// 2. Perform quality review (this is the "managing" part)
-            /// Runs the LLM-powered quality gate on the result.
-            /// </summary>
             var (score, feedback, shouldEscalate) = await ReviewWorkerResultAsync(message.Content, senderType, taskId);
 
-            /// <summary>
-            /// Marks the worker as available again after it has delivered a result.
-            /// </summary>
-            if (_workerStatus.TryGetValue(message.SenderId, out var status))
-            {
-                /// <summary>
-                /// Clears the busy flag.
-                /// </summary>
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Manager)] 📊 Review score: {score:F1}/10", score >= 8.0 ? ConsoleColor.Green : ConsoleColor.Yellow);
+
+            // Update worker status
+            if (_workerStatus.TryGetValue(senderId, out var status))
                 status.IsBusy = false;
 
-                /// <summary>
-                /// Clears the current task reference.
-                /// </summary>
-                status.CurrentTaskId = string.Empty;
+            // CRITICAL FIX: Use BossId for high-level tracking to avoid routing errors
+            string targetRecipient = Config.BossId ?? Config.ParentId ?? message.SenderId;
+
+            if (score >= 8.0 && !string.IsNullOrEmpty(targetRecipient))
+            {
+                ConsoleLogger.WriteLine($"[{Config.Name} - (Manager)] 🚀 Propagating success to Leadership: {targetRecipient}", ConsoleColor.Cyan);
+
+                await Bus.SendAsync(new AgentMessage(
+                    SenderId: Config.Id, // Set Manager as sender so Boss knows who it's coming from
+                    ReceiverId: targetRecipient,
+                    Type: MessageType.TaskResult,
+                    Content: $"[PASSED] Sub-task result from {message.SenderId} (Score: {score:F1}):\n{message.Content}",
+                    Timestamp: DateTime.UtcNow));
             }
 
-            if (senderType == "Coder")
-            /// <summary>
-            /// Specialized handling path for Coder agents (code → review → possible revision → Builder).
-            /// </summary>
+
+            // === STAGE 1: Researcher → Coder ===
+            if (senderType.Contains("Strategist", StringComparison.OrdinalIgnoreCase) ||
+                senderType.Contains("Analyst", StringComparison.OrdinalIgnoreCase) ||
+                senderType.Contains("Literature", StringComparison.OrdinalIgnoreCase))
             {
-                if (score < 6.0)
-                /// <summary>
-                /// If code quality is poor, trigger revision workflow.
-                /// </summary>
+                if (score < 7.0)
                 {
-                    // Send targeted revision back to same Coder
-                    int retries = _taskRetryCount.AddOrUpdate(taskId, 1, (_, v) => v + 1);
-                    /// <summary>
-                    /// Atomically increments the retry counter for this task.
-                    /// </summary>
+                    await SendRevisionRequest(senderId, score, feedback);
+                    return;
+                }
 
-                    if (retries <= 2)
-                    /// <summary>
-                    /// Limits revisions to maximum 2 retries to prevent infinite loops.
-                    /// </summary>
+                // Find the Coder
+                var coderId = _workerIds.FirstOrDefault(id => id.Contains("Implementer", StringComparison.OrdinalIgnoreCase) ||
+                                                              id.Contains("Code Implementer", StringComparison.OrdinalIgnoreCase) ||
+                                                              id.Contains("Coder", StringComparison.OrdinalIgnoreCase));
+
+                if (coderId != null)
+                {
+                    await Bus.SendAsync(new AgentMessage(Config.Id, coderId, MessageType.TaskAssignment,
+                        $"TECHNICAL PLAN FROM STRATEGIST (score {score:F1}/10):\n\n{message.Content}\n\n" +
+                        "Write the complete 'SumCalculator.cs' file using the file_manager tool (action='write', path='SumCalculator.cs'). " +
+                        "Make it a full console application with the best summation method based on the plan. Include Main method for testing. " +
+                        "Confirm when the file is written.",
+                        DateTime.UtcNow));
+
+                    ConsoleLogger.Success($"[{Config.Name} - (Manager)] → FORWARDED RESEARCH TO CODER");
+                }
+                return;
+            }
+
+            // === STAGE 2: Coder → Verifier ===
+            if (senderType.Contains("Implementer", StringComparison.OrdinalIgnoreCase) ||
+                senderType.Contains("Coder", StringComparison.OrdinalIgnoreCase))
+            {
+                if (score < 7.0)
+                {
+                    await SendRevisionRequest(senderId, score, feedback);
+                    return;
+                }
+
+                var verifierId = _workerIds.FirstOrDefault(id => id.Contains("Validator", StringComparison.OrdinalIgnoreCase) ||
+                                                                 id.Contains("DevOps", StringComparison.OrdinalIgnoreCase));
+
+                if (verifierId != null)
+                {
+                    await Bus.SendAsync(new AgentMessage(Config.Id, verifierId, MessageType.TaskAssignment,
+                        $"CODE FROM IMPLEMENTER (score {score:F1}/10):\n\n{message.Content}\n\n" +
+                        "Use terminal_executor to build and run this code. Report the full build and run output.",
+                        DateTime.UtcNow));
+
+                    ConsoleLogger.Success($"[{Config.Name} - (Manager)] → FORWARDED CODE TO VERIFIER");
+                }
+                return;
+            }
+
+            // === STAGE 3: Verifier → Boss ===
+            if (senderType.Contains("Validator", StringComparison.OrdinalIgnoreCase) ||
+                senderType.Contains("DevOps", StringComparison.OrdinalIgnoreCase))
+            {
+                // === STAGE 3: Verifier → Boss ===
+                if (senderType.Contains("Verifier") || senderType.Contains("Builder") || senderType.Contains("Validator"))
+                {
+                    if (score >= 8.0)
                     {
+                        ConsoleLogger.Success($"[{Config.Name} - (Manager)] ✅ Mission Criteria Met. Requesting Final Decision.");
+
+                        // TRIGGER: This DecisionRequest tells the Boss to wrap up the mission.
                         await Bus.SendAsync(new AgentMessage(
-                            Config.Id, message.SenderId, MessageType.TaskAssignment,
-                            $"REVISION REQUIRED (Score: {score:F1}/10):\n{feedback}\n\nOriginal task:\n{message.Content}\n\nFix all issues and re-submit clean code only.",
-                            DateTime.UtcNow));
-                        /// <summary>
-                        /// Sends a detailed revision request back to the same Coder.
-                        /// </summary>
-
-                        ConsoleLogger.Warning($"[Manager {Config.Name}] 🔄 Sent revision to Coder (retry {retries})");
-                        /// <summary>
-                        /// Logs the revision action.
-                        /// </summary>
-
-                        return;
-                        /// <summary>
-                        /// Exits early - wait for revised code.
-                        /// </summary>
+                            SenderId: message.SenderId,
+                            ReceiverId: Config.ParentId,
+                            Type: MessageType.DecisionRequest,
+                            Content: "Final stage complete. Please finalize the project and generate the report.",
+                            Timestamp: DateTime.UtcNow));
                     }
                 }
-
-                // Good enough or max retries → extract and forward to Builder
-                string cleanCode = ExtractCodeBlock(message.Content);
-                /// <summary>
-                /// Extracts only the code block (assumes ExtractCodeBlock helper exists elsewhere).
-                /// </summary>
-
-                if (_workerIds.ToArray().FirstOrDefault(w => w.Contains("Builder", StringComparison.OrdinalIgnoreCase)) is string builderId)
-                /// <summary>
-                /// Finds the first registered Builder worker.
-                /// </summary>
-                {
-                    await Bus.SendAsync(new AgentMessage(
-                        Config.Id, builderId, MessageType.TaskAssignment,
-                        $"Implement this EXACT clean C# code from Coder (review score: {score:F1}):\n{cleanCode}\n\nCreate necessary project files if needed, run 'dotnet build', verify thoroughly, and report success/errors with evidence.",
-                        DateTime.UtcNow));
-                    /// <summary>
-                    /// Forwards the cleaned, reviewed code to the Builder with clear instructions.
-                    /// </summary>
-
-                    ConsoleLogger.WriteLine($"[Manager {Config.Name}] 🔧 Forwarded cleaned code to Builder", ConsoleColor.Magenta);
-                    /// <summary>
-                    /// Logs successful handoff to Builder.
-                    /// </summary>
-                }
-                return;
-                /// <summary>
-                /// Ends Coder handling path.
-                /// </summary>
-            }
-
-            if (senderType == "Builder")
-            /// <summary>
-            /// Specialized handling for Builder agents (final quality gate before escalating to Boss).
-            /// </summary>
-            {
-                if (score >= 8.0 && shouldEscalate)
-                /// <summary>
-                /// Only high-quality, approved builds are escalated to the Boss.
-                /// </summary>
-                {
-                    ConsoleLogger.Success($"[Manager {Config.Name}] ✅ Builder passed quality gate ({score:F1}/10). Escalating verified result to Boss.");
-                    /// <summary>
-                    /// Logs successful quality gate pass.
-                    /// </summary>
-
-                    string targetBoss = Config.ParentId ?? throw new InvalidOperationException("Manager has no ParentId (Boss) configured.");
-                    /// <summary>
-                    /// Retrieves the Boss ID from configuration (throws if not set - safety).
-                    /// </summary>
-
-                    await Bus.SendAsync(new AgentMessage(
-                        Config.Id, targetBoss, MessageType.TaskResult,
-                        $"FINAL VERIFIED BUILD RESULT (Score: {score:F1}/10):\n{message.Content}\n\nFeedback: {feedback}\nAll quality gates passed by Manager.",
-                        DateTime.UtcNow));
-                    /// <summary>
-                    /// Sends the verified build result to the Boss.
-                    /// </summary>
-
-                    // Trigger Boss report generation reliably
-                    await Bus.SendAsync(new AgentMessage(
-                        Config.Id, targetBoss, MessageType.DecisionRequest,
-                        $"Builder completed verification with high quality. Full mission phase successful. Score: {score:F1}. Generate final report.",
-                        DateTime.UtcNow));
-                    /// <summary>
-                    /// Additionally asks the Boss to generate the final mission report.
-                    /// </summary>
-                }
                 else
-                /// <summary>
-                /// Path for Builder results that failed quality review.
-                /// </summary>
                 {
-                    // Builder failed quality → send back for fix (or escalate failure)
-                    ConsoleLogger.Warning($"[Manager {Config.Name}] ⚠️ Builder result scored low ({score:F1}). Sending revision feedback.");
-                    /// <summary>
-                    /// Logs the quality failure.
-                    /// </summary>
-
-                    // For simplicity, escalate failure to Boss or re-delegate — here we escalate with note
-                    string targetBoss = Config.ParentId ?? throw new InvalidOperationException("Manager has no ParentId (Boss) configured.");
-                    /// <summary>
-                    /// Gets Boss ID (same safety check as above).
-                    /// </summary>
-
-                    await Bus.SendAsync(new AgentMessage(
-                        Config.Id, targetBoss, MessageType.TaskResult,
-                        $"BUILDER RESULT FAILED QUALITY GATE (Score: {score:F1}):\n{message.Content}\nFeedback: {feedback}",
-                        DateTime.UtcNow));
-                    /// <summary>
-                    /// Escalates the failed build to the Boss with full context.
-                    /// </summary>
-                }
-                return;
-                /// <summary>
-                /// Ends Builder handling path.
-                /// </summary>
-            }
-
-            // Researcher or generic Worker
-            if (score >= 7.5)
-            /// <summary>
-            /// For good results from Researchers or generic workers: distill and learn.
-            /// </summary>
-            {
-                // Distill a concise lesson before propagating
-                string distilled = await DistillKnowledgeAsync(message.Content, senderType);
-                /// <summary>
-                /// Summarizes the raw output into key actionable insights.
-                /// </summary>
-
-                LearnSkill($"{senderType}_Distilled_{DateTime.UtcNow:yyyyMMdd_HHmmss}", distilled);
-                /// <summary>
-                /// Stores the distilled knowledge for long-term use.
-                /// </summary>
-
-                ConsoleLogger.WriteLine($"[Manager {Config.Name}] 📚 Researcher/Worker result distilled and learned (score {score:F1})", ConsoleColor.DarkCyan);
-                /// <summary>
-                /// Logs successful knowledge distillation.
-                /// </summary>
-            }
-            else if (score < 5.0)
-            /// <summary>
-            /// For very poor results: request revision (limited retries).
-            /// </summary>
-            {
-                // Low quality → request revision from same worker
-                int retries = _taskRetryCount.AddOrUpdate(taskId, 1, (_, v) => v + 1);
-                /// <summary>
-                /// Increments retry counter.
-                /// </summary>
-
-                if (retries <= 2)
-                /// <summary>
-                /// Only allow up to 2 revision attempts.
-                /// </summary>
-                {
-                    await Bus.SendAsync(new AgentMessage(
-                        Config.Id, message.SenderId, MessageType.TaskAssignment,
-                        $"REVISION NEEDED (Score: {score:F1}):\n{feedback}\n\nImprove and resubmit.",
-                        DateTime.UtcNow));
-                    /// <summary>
-                    /// Sends revision request back to the original worker.
-                    /// </summary>
+                    await SendRevisionRequest(senderId, score, feedback);
                 }
             }
+        }
+
+        private async Task SendRevisionRequest(string senderId, double score, string feedback)
+        {
+            await Bus.SendAsync(new AgentMessage(
+                Config.Id, senderId, MessageType.TaskAssignment,
+                $"REVISION REQUIRED (Score: {score:F1}/10):\n{feedback}\n\nImprove your output and resubmit.",
+                DateTime.UtcNow));
+
+            ConsoleLogger.Warning($"[{Config.Name} - (Manager)] 🔄 Revision sent to {senderId}");
         }
 
         // New helper: Distill knowledge for better learning
@@ -643,7 +531,7 @@ CONTENT TO REVIEW:
             /// <summary>
             /// Logs every incoming message for full traceability.
             /// </summary>
-            ConsoleLogger.WriteLine($"[Manager {Config.Name}] 📥 Received {message.Type} from {message.SenderId}", ConsoleColor.Blue);
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Manager)] 📥 Received {message.Type} from {message.SenderId}", ConsoleColor.Blue);
 
             /// <summary>
             /// Routes the message based on its type.
@@ -675,7 +563,7 @@ CONTENT TO REVIEW:
                 /// Gracefully handles unrecognized message types with a warning.
                 /// </summary>
                 default:
-                    ConsoleLogger.Warning($"[Manager {Config.Name}] ⚠️ Unknown message type: {message.Type}");
+                    ConsoleLogger.Warning($"[{Config.Name} - (Manager)] ⚠️ Unknown message type: {message.Type}");
                     break;
             }
         }
@@ -726,7 +614,7 @@ CONTENT TO REVIEW:
             Memory.Remember(skillName, skillData, propagate: true); // Upstream propagation - matches ReadMe.txt exactly
 
             // Log the learning and propagation event
-            ConsoleLogger.WriteLine($"[Manager {Config.Name}] 💡 Learned and propagated skill: {skillName}", ConsoleColor.DarkCyan);
+            ConsoleLogger.WriteLine($"[{Config.Name} - (Manager)] 💡 Learned and propagated skill: {skillName}", ConsoleColor.DarkCyan);
         }
     }
 }

@@ -65,6 +65,18 @@
         /// The ID of this agent's direct boss (set automatically by Boss.StartManager / StartWorker).
         /// Never hard-code "BOSS_ID" again!
         /// </summary>
+        public string? BossId 
+        {
+            get
+            {
+                return BossAgent.BossId;
+            }
+        }
+
+        /// <summary>
+        /// The ID of this agent's direct boss (set automatically by Boss.StartManager / StartWorker).
+        /// Never hard-code "BOSS_ID" again!
+        /// </summary>
         public string? ParentId { get; set; }
 
         /// <summary>

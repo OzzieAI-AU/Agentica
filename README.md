@@ -72,7 +72,7 @@ One of Agentica's greatest strengths is its ability to assign different LLM prov
 
 ```C#
 
-         // EV Names:
+        // EV Names:
         string GeminiEVName = "Gemini_API_KEY";
         string GrokEVName = "Grok_API_KEY";
 
@@ -87,9 +87,8 @@ One of Agentica's greatest strengths is its ability to assign different LLM prov
         string projectPath = Path.Combine(Directory.GetCurrentDirectory(), "Workspace");
 
         // 1. Initialize different providers
-        // In your Program.cs or main entry point
         var bus = new AgentBus();
-        var liveCache = new LiveCache("Workspace");
+        var liveCache = new LiveCache(projectPath);
 
         // All available brains (Boss chooses the best one for each role)
         var brains = new Dictionary<string, ILlmProvider>
@@ -100,8 +99,18 @@ One of Agentica's greatest strengths is its ability to assign different LLM prov
         };
 
         // Init the Boss:
-        var bossConfig = new AgentConfig { Name = "Ozzie-CEO", Provider = new OllamaProvider("gemma4:e4b") };
-        var boss = new BossAgent(bossConfig, bus, new DragonMemory(bossConfig.Id), brains);
+        string BossName = "Ozzie-CEO";
+        var bossConfig = new AgentConfig 
+        {
+            Name = BossName,
+            Provider = new OllamaProvider("gemma4:e4b")
+        };
+        DragonMemory bossMemory = new DragonMemory(bossConfig.Id);
+        bossMemory.AttachPersistentCache(liveCache);
+
+        // Always use AgentFactory to create Boss, Manager and Worker Agents:
+        AgentFactory factory = new AgentFactory(bus, liveCache);
+        BossAgent boss = factory.CreateBoss(bossConfig, brains);
 
         // Give the Boss ONE mission — it does everything else automatically
         string mission = "Research best practices for a C# 64-bit sum implementation, create the file, and verify it with a terminal build command.";
