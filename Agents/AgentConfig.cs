@@ -74,10 +74,10 @@
         }
 
         /// <summary>
-        /// The ID of this agent's direct boss (set automatically by Boss.StartManager / StartWorker).
-        /// Never hard-code "BOSS_ID" again!
+        /// The ID of this agent's direct supervisor.
+        /// Workers report to Managers; Managers report to the Boss.
         /// </summary>
-        public string? ParentId { get; set; }
+        public string? ManagerId { get; set; }
 
         /// <summary>
         /// Gets or sets a detailed description of the agent's primary task or purpose.

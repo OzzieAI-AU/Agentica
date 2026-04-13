@@ -125,29 +125,28 @@
         /// </summary>
         public async Task ListenAsync(AgentConfig config)
         {
-            // 1. Acquire a dedicated reader for this agent's unique channel ID
-            Config = config;
+
+            //Config = config;
             var reader = Bus.GetReader(config.Id);
 
-            // 2. Beautiful diagnostic log confirming the agent has entered listening state
-            ConsoleLogger.WriteLine($"[Agent {config.Name}] ?? Listening started on channel {config.Id}", ConsoleColor.DarkGray);
+            ConsoleLogger.WriteLine($"[Agent {config.Name}] 👂 Listening started on channel {config.Id}", ConsoleColor.DarkGray);
 
-            // 3. The infinite async enumeration over the channel — this is the "Observe" part of the cycle
             await foreach (var message in reader.ReadAllAsync())
             {
-                // 4. Fire-and-forget processing on a background task
-                //    This isolation is what makes the swarm immortal: one agent's crash cannot kill others
+                // One task per message to ensure sequential "Process -> Think" logic
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        // 5. Delegate to the abstract handler that derived agents must implement
+                        // 1. Process: Handle routing, state updates, or specialized logic
                         await ProcessIncomingMessageAsync(message);
+
+                        // 2. Think: Trigger the actual LLM reasoning cycle (The Brain)
+                        await ThinkActObserveAsync(message);
                     }
                     catch (Exception ex)
                     {
-                        // 6. Critical error logging — the only place a listen error is allowed to surface
-                        ConsoleLogger.WriteLine($"[Agent {config.Name}] 💥 CRITICAL LISTEN ERROR: {ex.Message}", ConsoleColor.Red);
+                        ConsoleLogger.WriteLine($"[Agent {config.Name}] 💥 CRITICAL ERROR: {ex.Message}", ConsoleColor.Red);
                     }
                 });
             }
@@ -165,6 +164,75 @@
         /// <param name="message">The deserialized AgentMessage from the bus.</param>
         protected abstract Task ProcessIncomingMessageAsync(AgentMessage message);
 
+        /// <summary>
+        /// Executes the LLM request with Mandatory Exponential Backoff (1s, 2s, 4s, 8s, 16s).
+        /// </summary>
+        protected async Task<LlmResponse?> GenerateResponseWithRetryAsync()
+        {
+            int maxRetries = 5;
+            for (int i = 0; i < maxRetries; i++)
+            {
+                try
+                {
+                    var response = await Config.Provider.GenerateResponseAsync(Memory.History, _tools);
+                    return (LlmResponse)response;
+                }
+                catch (Exception ex) when (i < maxRetries - 1)
+                {
+                    int delay = (int)Math.Pow(2, i) * 1000;
+                    // Do not log to console as per instructions, just wait
+                    await Task.Delay(delay);
+                }
+                catch (Exception finalEx)
+                {
+                    ConsoleLogger.WriteLine($"[{Config.Name}] 🛑 Permanent LLM Failure after {maxRetries} attempts: {finalEx.Message}", ConsoleColor.Red);
+                }
+            }
+            return null;
+        }
+
+        protected virtual async Task ThinkActObserveAsync(AgentMessage message)
+        {
+            // 1. RECALL KNOWLEDGE
+            string? relevantSkill = Memory.Recall(message.Content);
+            if (!string.IsNullOrEmpty(relevantSkill))
+            {
+                Memory.History.Add(new ChatMessage("system", $"[RECALLED KNOWLEDGE]: {relevantSkill}"));
+            }
+
+            Memory.History.Add(new ChatMessage("user", message.Content));
+
+            // 2. CONTEXT CONCILIATION (Summary block logic)
+            if (Memory.History.Count > 10)
+            {
+                var manager = new MemoryManager();
+                var condensed = await manager.ConciliateMemoryAsync(
+                    Memory.History.ConvertAll(m => (ChatMessage)m),
+                    Config.Provider as OzzieAI.Agentica.Providers.Ollama.OllamaProvider);
+
+                Memory.History.Clear();
+                Memory.History.AddRange(condensed);
+            }
+
+            // 3. GENERATE RESPONSE WITH BACKOFF
+            var response = await GenerateResponseWithRetryAsync();
+
+            if (response != null)
+            {
+                await ProcessResponseAsync(response);
+            }
+            else
+            {
+                // Notify Manager of technical failure so it doesn't loop on "Parsing Error"
+                await Bus.SendAsync(new AgentMessage(
+                    Config.Id,
+                    message.SenderId,
+                    MessageType.TaskResult,
+                    "ERROR: LLM_TIMEOUT_RETRY_EXHAUSTED. Please check local Ollama instance.",
+                    DateTime.UtcNow));
+            }
+        }
+
         // ─────────────────────────────────────────────────────────────────────
         // CORE THINK-ACT-OBSERVE CYCLE
         // ─────────────────────────────────────────────────────────────────────
@@ -176,6 +244,7 @@
         /// <param name="taskDescription">Human-readable goal for this reasoning session.</param>
         protected async Task StartTaskAsync(string taskDescription)
         {
+
             // Fix: Always clear and rebuild the system prompt using the LATEST Config
             Memory.History.Clear();
 
@@ -243,6 +312,49 @@
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// The primary cognitive loop. Optimised to perform Context Conciliation 
+        /// and Tactical Recall before engaging the LLM.
+        /// </summary>
+        public async Task ThinkAsync(AgentMessage message)
+        {
+            // 1. Initialise Memory with the incoming task if history is empty
+            if (Memory.History.Count == 0)
+            {
+                Memory.History.Add(new ChatMessage("system", Config.TaskDescription));
+            }
+
+            // 2. TACTICAL RECALL: Check if we have learned skills relevant to this content
+            // This transforms the agent from 'forgetful' to 'expert'.
+            string? relevantSkill = Memory.Recall(message.Content);
+            if (!string.IsNullOrEmpty(relevantSkill))
+            {
+                Memory.History.Add(new ChatMessage("system", $"[RECALLED KNOWLEDGE]: {relevantSkill}"));
+            }
+
+            Memory.History.Add(new ChatMessage("user", message.Content));
+
+            // 3. CONTEXT CONCILIATION: Prevent Token Overflow
+            // We use the MemoryManager to summarize middle-history while keeping the Anchor and the Latest context.
+            if (Memory.History.Count > 10)
+            {
+                var manager = new MemoryManager();
+                // Note: In production, use a fast/cheap model for summarization
+                var condensed = await manager.ConciliateMemoryAsync(
+                    Memory.History.ConvertAll(m => (ChatMessage)m),
+                    Config.Provider as OzzieAI.Agentica.Providers.Ollama.OllamaProvider);
+
+                Memory.History.Clear();
+                Memory.History.AddRange(condensed);
+            }
+
+            // 4. GENERATE RESPONSE
+            var response = await Config.Provider.GenerateResponseAsync(Memory.History, _tools);
+
+            // 5. PROCESS & PERSIST (Handles tool execution and result storage)
+            await ProcessResponseAsync((LlmResponse)response);
         }
     }
 }

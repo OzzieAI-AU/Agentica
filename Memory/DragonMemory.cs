@@ -11,6 +11,7 @@ namespace OzzieAI.Agentica
     using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Text;
     using System.Threading.Tasks;
 
     /// <summary>
@@ -58,9 +59,11 @@ namespace OzzieAI.Agentica
         /// <summary>
         /// Creates a fully wired DragonMemory instance.
         /// </summary>
-        public DragonMemory(string agentId)
+        public DragonMemory(string agentId, LiveCache cache)
         {
+            // 
             _agentId = agentId ?? throw new ArgumentNullException(nameof(agentId));
+            PersistentCache = cache;
         }
 
         /// <summary>
@@ -94,7 +97,7 @@ namespace OzzieAI.Agentica
             if (History.Count > 12) // Threshold from MemoryManager
             {
                 // Use the fast local summarizer (Ollama) for compression
-                var summarizer = new OllamaProvider("llama3.1"); // or whatever fast model you use
+                var summarizer = new OllamaProvider("gemma4:e2b"); // or whatever fast model you use
                 var conciliated = await _memoryManager.ConciliateMemoryAsync(
                     History.Cast<ChatMessage>().ToList(), summarizer);
 
@@ -110,6 +113,58 @@ namespace OzzieAI.Agentica
         {
             // Fire-and-forget the async compression (non-blocking)
             _ = AddMessageAsync(message);
+        }
+
+        /// <summary>
+        /// Performs a tiered lookup for information. 
+        /// First checks tactical (learned) skills, then falls back to the persistent file cache.
+        /// </summary>
+        /// <param name="query">The keyword or file path to recall.</param>
+        /// <returns>The content if found; otherwise, null.</returns>
+        public string? Recall(string query)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return null;
+
+            // Tier 1: Tactical Memory (Fastest)
+            // Look for partial matches in learned skill keys
+            var skillKey = _tacticalSkills.Keys.FirstOrDefault(k =>
+                query.Contains(k, StringComparison.OrdinalIgnoreCase));
+
+            if (skillKey != null) return _tacticalSkills[skillKey];
+
+            // Tier 2: Persistent Cache (File System)
+            var file = PersistentCache.GetAllFiles().FirstOrDefault(f =>
+                f.FileName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                f.FullPath.EndsWith(query));
+
+            return file?.Content;
+        }
+
+        /// <summary>
+        /// Generates a visual ASCII representation of the project hierarchy.
+        /// Used by the Boss agent to understand the 'State of the Union'.
+        /// </summary>
+        public string BuildAsciiGraph()
+        {
+            var files = PersistentCache.GetAllFiles();
+            if (!files.Any()) return "Memory Repository: [Empty]";
+
+            var sb = new StringBuilder();
+            sb.AppendLine("═══ PROJECT COGNITIVE MAP ═══");
+
+            // Group by extension to show logical segments
+            var groups = files.GroupBy(f => f.Extension);
+            foreach (var group in groups)
+            {
+                sb.AppendLine($"Folder: [{group.Key.ToUpper().Replace(".", "")} Artifacts]");
+                foreach (var file in group)
+                {
+                    string status = file.SizeBytes > 1000 ? "●" : "○";
+                    sb.AppendLine($"  └── {status} {file.FileName} ({file.SizeBytes} bytes)");
+                }
+            }
+            sb.AppendLine("═════════════════════════════");
+            return sb.ToString();
         }
 
         /// <summary>
@@ -151,22 +206,5 @@ namespace OzzieAI.Agentica
 
             ConsoleLogger.WriteLine($"[DragonMemory {_agentId}] 💡 Remembered & persisted: {key}", ConsoleColor.DarkGreen);
         }
-
-        /// <summary>
-        /// Tiered recall: Ephemeral → Persistent Cache.
-        /// </summary>
-        public string? Recall(string key)
-        {
-            if (_tacticalSkills.TryGetValue(key, out var val))
-                return val;
-
-            return PersistentCache?.GetAllFiles()
-                .FirstOrDefault(f => f.FullPath == key)?.Content;
-        }
-
-        /// <summary>
-        /// Builds ASCII project map for Boss decision prompts (used in HandleDecisionRequestAsync).
-        /// </summary>
-        public string BuildAsciiGraph() => PersistentCache?.BuildAsciiGraph() ?? "No project artifacts yet.";
     }
 }

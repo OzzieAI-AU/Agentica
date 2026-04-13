@@ -207,12 +207,40 @@ namespace OzzieAI.Agentica
         /// </summary>
         private readonly ConcurrentDictionary<string, CachedFile> _files = new(StringComparer.OrdinalIgnoreCase);
 
-        private readonly object _saveLock = new();
+        // ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+        // THREAD-SAFE PERSISTENCE ENGINE (IRONCLAD)
+        // ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// A modern, async-friendly lock. Ensures absolutely only ONE background task can write at a time.
+        /// </summary>
+        private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
+
+        /// <summary>
+        /// Volatile ensures that all threads immediately see the updated state of this flag,
+        /// preventing CPU-cache synchronization issues.
+        /// </summary>
+        private volatile bool _saveQueued = false;
+
+        /// <summary>
+        /// Signals the cancellation of pending background saves when the application is shutting down.
+        /// </summary>
+        private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+
+        /// <summary>
+        /// A state flag indicating whether a background save operation is already queued.
+        /// This acts as a throttle to prevent "Task Storms" during high-frequency updates.
+        /// </summary>
+        private bool _isSavePending = false;
+
+
+        private bool _isWorkerActive = false;
+        private readonly object _workerLock = new object();
+
         private FileSystemWatcher? _watcher;
         private readonly object _lock = new object();
         private bool IncludeFileContents = true;
         private bool _disposed;
-
 
         /// <summary>
         /// Event raised when any file is added, modified, removed, or its score/content changes.
@@ -235,7 +263,7 @@ namespace OzzieAI.Agentica
         {
 
             if (string.IsNullOrWhiteSpace(rootDirectory) || !Directory.Exists(rootDirectory))
-                throw new DirectoryNotFoundException($"Root directory not found: {rootDirectory}");
+                Directory.CreateDirectory(rootDirectory);
 
             _rootDirectory = Path.GetFullPath(rootDirectory);
             _cacheFilePath = Path.Combine(_rootDirectory, ".livecache.json");
@@ -278,21 +306,94 @@ namespace OzzieAI.Agentica
             }
         }
 
+        // ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+        // THREAD-SAFE & ANTIVIRUS-PROOF PERSISTENCE ENGINE
+        // ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+
         /// <summary>
-        /// Saves the current cache state to disk (thread-safe).
+        /// Triggers a debounced background save operation. 
+        /// Guarantees only one background worker is ever active.
         /// </summary>
-        private void SaveToDisk()
+        public void SaveToDisk()
         {
-            lock (_saveLock) // Prevent "file in use" exceptions
+            _saveQueued = true;
+
+            // Strict lock to ensure we never spawn overlapping background tasks
+            lock (_workerLock)
+            {
+                if (_isWorkerActive) return;
+                _isWorkerActive = true;
+            }
+
+            _ = Task.Run(async () =>
             {
                 try
                 {
-                    var json = JsonSerializer.Serialize(_files.Values);
-                    File.WriteAllText(_cacheFilePath, json);
+                    while (_saveQueued)
+                    {
+                        // Reset flag before working so new requests can queue up again
+                        _saveQueued = false;
+
+                        // DEBOUNCE: Wait 500ms to batch multiple rapid changes
+                        await Task.Delay(500, _cts.Token);
+
+                        await WriteDirectlyAsync();
+                    }
                 }
-                catch (Exception ex)
+                catch (OperationCanceledException) { /* App shutting down */ }
+                finally
                 {
-                    ConsoleLogger.WriteLine($"[CACHE ERROR] {ex.Message}", ConsoleColor.Red);
+                    lock (_workerLock)
+                    {
+                        _isWorkerActive = false;
+                        // Double-check: If a request came in exactly as we were exiting, restart the worker
+                        if (_saveQueued) SaveToDisk();
+                    }
+                }
+            });
+        }
+
+        /// <summary>
+        /// Writes directly to the JSON file using FileShare.Read to bypass Antivirus and IDE file locks.
+        /// </summary>
+        private async Task WriteDirectlyAsync()
+        {
+            const int MaxRetries = 5;
+            int attempt = 0;
+
+            // Snapshot the dictionary values so the JSON Serializer doesn't crash if an agent 
+            // adds a new file at the exact millisecond serialization is running.
+            var snapshot = _files.Values.ToList();
+
+            while (attempt < MaxRetries)
+            {
+                try
+                {
+                    var options = new JsonSerializerOptions { WriteIndented = true };
+                    string json = JsonSerializer.Serialize(snapshot, options);
+
+                    // CRITICAL FIX: Write directly using a FileStream with FileShare.Read.
+                    // This prevents Windows Defender or VS Code from throwing "File in use" errors.
+                    using (var fs = new FileStream(_cacheFilePath, FileMode.Create, FileAccess.Write, FileShare.Read))
+                    using (var writer = new StreamWriter(fs))
+                    {
+                        await writer.WriteAsync(json);
+                    }
+
+                    return; // Success! Exit cleanly.
+                }
+                catch (IOException)
+                {
+                    attempt++;
+                    if (attempt >= MaxRetries)
+                    {
+                        // If it STILL fails 5 times, a process has a hard Write-Lock on it.
+                        ConsoleLogger.WriteLine($"[LiveCache] WARNING: File hard-locked by external process. Changes kept in memory.", ConsoleColor.DarkYellow);
+                        return;
+                    }
+
+                    // Progressive backoff: 300ms, 600ms, 900ms...
+                    await Task.Delay(300 * attempt);
                 }
             }
         }
@@ -534,43 +635,6 @@ namespace OzzieAI.Agentica
         }
 
         /// <summary>
-        /// Updates file content and score (called after LLM modifications).
-        /// Writes changes back to disk and persists cache.
-        /// </summary>
-        //public void UpdateFileContentAndScore(string fullPath, string newContent, int newScore, string? notes = null)
-        //{
-
-        //    if (!_files.TryGetValue(fullPath, out var file)) 
-        //        return;
-
-        //    lock (_lock)
-        //    {
-        //        if (!string.IsNullOrEmpty(newContent))
-        //        {
-        //            file.LastImproved = DateTime.UtcNow;
-        //            file.FixCount++;                    // ← Increment fix counter
-        //        }
-
-        //        file.Content = newContent ?? file.Content;
-        //        file.Score = Math.Clamp(newScore, 0, 100);
-        //        if (!string.IsNullOrWhiteSpace(notes))
-        //            file.Notes = notes;
-
-        //        if (file.IsText && File.Exists(fullPath))
-        //        {
-        //            try
-        //            {
-        //                File.WriteAllText(fullPath, newContent, Encoding.UTF8);
-        //                file.RefreshFromDisk();
-        //            }
-        //            catch { /* Silent fail - disk may be locked */ }
-        //        }
-
-        //        OnCacheChanged?.Invoke(this, EventArgs.Empty);
-        //        SaveToDisk();
-        //    }
-        //}
-        /// <summary>
         /// HARDENED: Updates file ONLY if the new code is syntactically valid C# and appears complete.
         /// Never writes incomplete/truncated code to disk.
         /// </summary>
@@ -636,7 +700,12 @@ namespace OzzieAI.Agentica
                 }
 
                 OnCacheChanged?.Invoke(this, EventArgs.Empty);
-                SaveToDisk();
+                
+                // AUTONOMOUS TRIGGER: Fire-and-forget save to ensure disk integrity 
+                // without blocking the agent's reasoning loop.
+                _ = Task.Run(() => SaveToDisk());
+
+                ConsoleLogger.WriteLine($"[LiveCache] 💾 Auto-persisted file: {file.FileName} (Score: {file.Score})", ConsoleColor.DarkCyan);
             }
         }
 

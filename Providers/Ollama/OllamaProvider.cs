@@ -108,7 +108,7 @@
         /// </summary>
         public async Task<bool> IsHealthyAsync() => await CheckHeartbeatAsync();
 
-        
+
         /// <summary>
         /// Generates a response from the local Ollama instance.
         /// Maps Agentica messages to Ollama's specific message schema.
@@ -116,15 +116,20 @@
         public async Task<IChatResponse> GenerateResponseAsync(List<IChatMessage> history, List<IAgentTool>? tools = null)
         {
 
+            // Defensive copy + clean history before sending (remove previous bad entries)
+            var cleanHistory = history
+                .Where(m => !string.IsNullOrWhiteSpace(m.Content?.ToString()))
+                .ToList();
+
             var request = new OllamaChatRequest
             {
                 Model = _model,
                 Stream = false,
                 Tools = tools?.Select(t => t.GetToolDefinition()).ToList(),
-                Messages = history.Select(m => new OllamaMessage
+                Messages = cleanHistory.Select(m => new OllamaMessage
                 {
-                    Role = m.Role.ToLower() == "tool" ? "tool" : m.Role, // Ollama uses 'tool' role for results
-                    Content = m.Content.ToString(),
+                    Role = m.Role?.ToLower() == "tool" ? "tool" : m.Role ?? "user",
+                    Content = m.Content?.ToString() ?? "",
                     Images = m.MediaData != null ? new List<string> { m.MediaData } : null
                 }).ToList()
             };
@@ -134,42 +139,78 @@
                 string json = JsonSerializer.Serialize(request, _jsonOptions);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var response = await _http.PostAsync($"{_baseUrl}/api/chat", content);
-                response.EnsureSuccessStatusCode();
+                var httpResponse = await _http.PostAsync($"{_baseUrl}/api/chat", content);
+                httpResponse.EnsureSuccessStatusCode();
 
-                string resultJson = await response.Content.ReadAsStringAsync();
+                string resultJson = await httpResponse.Content.ReadAsStringAsync();
+
                 using var doc = JsonDocument.Parse(resultJson);
-                var messageElement = doc.RootElement.GetProperty("message");
+                var root = doc.RootElement;
+
+                // 1. Safely get the "message" object
+                if (!root.TryGetProperty("message", out var messageElement) || messageElement.ValueKind != JsonValueKind.Object)
+                {
+                    return new LlmResponse
+                    {
+                        Content = "Ollama returned invalid response (no message object)"
+                    };
+                }
 
                 var result = new LlmResponse();
 
-                // 1. Extract Text Content
+                // 2. Extract content safely
                 if (messageElement.TryGetProperty("content", out var contentProp))
                 {
                     result.Content = contentProp.GetString() ?? "";
                 }
+                else
+                {
+                    result.Content = "";
+                }
 
-                // 2. Extract Tool Calls
-                if (messageElement.TryGetProperty("tool_calls", out var toolCallsProp))
+                // 3. Extract tool calls safely
+                if (messageElement.TryGetProperty("tool_calls", out var toolCallsProp)
+                    && toolCallsProp.ValueKind == JsonValueKind.Array)
                 {
                     var calls = new List<ToolCall>();
+
                     foreach (var call in toolCallsProp.EnumerateArray())
                     {
-                        var func = call.GetProperty("function");
-                        calls.Add(new ToolCall
+                        if (call.TryGetProperty("function", out var func)
+                            && func.TryGetProperty("name", out var nameProp)
+                            && func.TryGetProperty("arguments", out var argsProp))
                         {
-                            ToolName = func.GetProperty("name").GetString() ?? "",
-                            ArgumentsJson = func.GetProperty("arguments").GetRawText()
-                        });
+                            calls.Add(new ToolCall
+                            {
+                                ToolName = nameProp.GetString() ?? "",
+                                ArgumentsJson = argsProp.GetRawText()
+                            });
+                        }
                     }
-                    result.ToolCalls = calls.Any() ? calls : null;
+
+                    if (calls.Any())
+                        result.ToolCalls = calls;
+                }
+
+                // NEW: Critical fix - Do NOT add empty responses to history here!
+                // Let the caller decide based on whether we got content OR tool calls.
+                if (string.IsNullOrWhiteSpace(result.Content) && (result.ToolCalls == null || !result.ToolCalls.Any()))
+                {
+                    // This is the problematic empty response case
+                    return new LlmResponse
+                    {
+                        Content = "[EMPTY_OLLAMA_RESPONSE]"
+                    };
                 }
 
                 return result;
             }
             catch (Exception ex)
             {
-                return new LlmResponse { Content = $"Ollama Local Error: {ex.Message}" };
+                return new LlmResponse
+                {
+                    Content = $"Ollama Local Error: {ex.Message}"
+                };
             }
         }
     }

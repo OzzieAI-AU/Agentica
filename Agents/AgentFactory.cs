@@ -21,6 +21,9 @@
         private BossAgent? _currentBoss;
         private ManagerAgent? _currentManager;
 
+
+        public LiveCache LiveCache => _sharedCache;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="AgentFactory"/>.
         /// </summary>
@@ -45,7 +48,8 @@
             // 2. REGISTER the Boss so it can receive TaskResults
             _bus.RegisterAgent(config.Id);
 
-            var boss = new BossAgent(config, _bus, new DragonMemory(config.Id), availableBrains);
+            DragonMemory memory = new DragonMemory(config.BossId, _sharedCache);
+            var boss = new BossAgent(config, _bus, memory, availableBrains);
 
             // 3. START the listening loop
             _ = Task.Run(() => boss.ListenAsync(config));
@@ -88,13 +92,16 @@
         /// </summary>
         private ManagerAgent CreateManager(AgentConfig config)
         {
+            // 
+            DragonMemory ManagerMemory = new DragonMemory(config.Id, _sharedCache);
+            
             // 1. Ensure the Manager knows who its Boss is BEFORE instantiation
             if (_currentBoss != null)
             {
-                config.ParentId = _currentBoss.Config.Id;
+                config.ManagerId = _currentBoss.Config.Id;
             }
 
-            var manager = new ManagerAgent(config, _bus, new DragonMemory(config.Id));
+            var manager = new ManagerAgent(config, _bus, ManagerMemory);
 
             // 2. Cognitive Bonding: Manager learns from the Boss's strategic decisions
             if (_currentBoss != null)
@@ -109,17 +116,20 @@
         /// </summary>
         private WorkerAgent CreateWorker(AgentConfig config)
         {
+            // 
+            DragonMemory WorkerMemory = new DragonMemory(config.Id, _sharedCache);
+
             // 1. Hierarchical Wiring: Assign the direct Parent/Boss ID
             if (_currentManager != null)
             {
-                config.ParentId = _currentManager.Config.Id;
+                config.ManagerId = _currentManager.Config.Id;
             }
             else if (_currentBoss != null)
             {
-                config.ParentId = _currentBoss.Config.Id;
+                config.ManagerId = _currentBoss.Config.Id;
             }
 
-            var worker = new WorkerAgent(config, _bus, new DragonMemory(config.Id));
+            var worker = new WorkerAgent(config, _bus, WorkerMemory);
 
             // 2. Cognitive Bonding: Establish memory inheritance
             if (_currentManager != null)
